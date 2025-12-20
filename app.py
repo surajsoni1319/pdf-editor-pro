@@ -498,8 +498,9 @@ elif feature == "✨ Highlight Text":
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #666;'>
-    <p>📄 PDF Editor Pro </p>
-    <p>💡 Tip: All processing happens in your browser. Files are not stored.</p>
+    <p>📄 Stat Cement PDF Editor Pro </p>
+    <p>💡 All processing happens in your browser. Files are not stored.</p>
 </div>
 
 """, unsafe_allow_html=True)
+
