@@ -531,7 +531,7 @@ elif feature == "💧 Add Watermark":
             "Number of pages to preview",
             min_value=1,
             max_value=5,
-            value=2
+            value=1
         )
 
         try:
@@ -752,6 +752,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
