@@ -561,140 +561,105 @@ elif feature == "💧 Add Watermark":
             "⬇️ Download Final Watermarked PDF"
         )
 
-# Feature 6: Extract Text (With OCR Support)
+# Feature 6: Extract Text
 elif feature == "📝 Extract Text":
     st.header("📝 Extract Text from PDF")
-    st.write("Extract text from digital or scanned PDFs using OCR if required.")
+    st.write("Extract text from all pages or selected pages of a PDF.")
 
     uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
 
     if uploaded_file:
-        # -------------------------------
-        # Step 1: User choices
-        # -------------------------------
-        col1, col2 = st.columns(2)
+        try:
+            reader = PyPDF2.PdfReader(uploaded_file)
+            total_pages = len(reader.pages)
 
-        with col1:
-            doc_type = st.radio(
-                "Select document type",
-                ["📄 Document", "🧾 Invoice / Bill"]
+            st.info(f"📄 Total pages: {total_pages}")
+
+            extract_option = st.radio(
+                "Extraction mode",
+                ["Extract all pages", "Extract specific pages"],
+                horizontal=True
             )
 
-        with col2:
-            extract_method = st.radio(
-                "Extraction method",
-                ["Normal (Text-based PDF)", "OCR (Scanned PDF)"]
-            )
+            pages_to_extract = None
+            if extract_option == "Extract specific pages":
+                pages_to_extract = st.text_input(
+                    "Enter page numbers (e.g. 1,3,5-7)",
+                    placeholder="1,3,5-7"
+                )
 
-        if st.button("📝 Extract", use_container_width=True):
-            try:
+            if st.button("📝 Extract Text", use_container_width=True):
                 extracted_text = ""
+                page_text_map = {}
 
-                # ===============================
-                # NORMAL TEXT EXTRACTION
-                # ===============================
-                if extract_method == "Normal (Text-based PDF)":
-                    reader = PyPDF2.PdfReader(uploaded_file)
+                with st.spinner("Extracting text..."):
+                    if extract_option == "Extract all pages":
+                        page_numbers = list(range(1, total_pages + 1))
+                    else:
+                        if not pages_to_extract:
+                            st.warning("⚠️ Please enter page numbers.")
+                            st.stop()
 
-                    with st.spinner("Extracting text from PDF..."):
-                        for page in reader.pages:
-                            page_text = page.extract_text()
-                            if page_text:
-                                extracted_text += page_text + "\n\n"
+                        page_numbers = []
+                        for part in pages_to_extract.split(","):
+                            part = part.strip()
+                            if "-" in part:
+                                start, end = map(int, part.split("-"))
+                                page_numbers.extend(range(start, end + 1))
+                            else:
+                                page_numbers.append(int(part))
 
-                # ===============================
-                # OCR EXTRACTION
-                # ===============================
-                else:
-                    with st.spinner("Running OCR on scanned PDF..."):
-                        images = convert_from_bytes(
-                            uploaded_file.getvalue(),
-                            dpi=300
-                        )
+                        page_numbers = sorted(set(page_numbers))
 
-                        for img in images:
-                            text = pytesseract.image_to_string(img)
-                            extracted_text += text + "\n\n"
+                        if not all(1 <= p <= total_pages for p in page_numbers):
+                            st.error("❌ Invalid page numbers detected.")
+                            st.stop()
 
-                if not extracted_text.strip():
-                    st.warning("⚠️ No text could be extracted.")
-                    st.stop()
+                    for page_num in page_numbers:
+                        page = reader.pages[page_num - 1]
+                        page_text = page.extract_text()
 
-                st.success("✅ Text extraction completed!")
+                        if not page_text or not page_text.strip():
+                            page_text = "[No extractable text found on this page]"
 
-                # ======================================================
-                # DOCUMENT → TXT
-                # ======================================================
-                if doc_type == "📄 Document":
-                    st.text_area(
-                        "📖 Extracted Text",
-                        extracted_text,
-                        height=400
-                    )
+                        page_text_map[page_num] = page_text
+                        extracted_text += f"\n\n--- Page {page_num} ---\n\n{page_text}"
 
-                    st.download_button(
-                        label="⬇️ Download as TXT",
-                        data=extracted_text,
-                        file_name="extracted_text.txt",
-                        mime="text/plain",
-                        use_container_width=True
-                    )
+                # Save in session
+                st.session_state.extracted_text = extracted_text
+                st.session_state.page_text_map = page_text_map
 
-                # ======================================================
-                # INVOICE / BILL → EXCEL
-                # ======================================================
-                else:
-                    st.markdown("### 📊 Extracted Invoice Data")
+                st.success(f"✅ Text extracted from {len(page_numbers)} page(s)!")
 
-                    # Basic rule-based field extraction
-                    fields = {
-                        "Invoice Number": "",
-                        "Invoice Date": "",
-                        "Vendor Name": "",
-                        "GST Number": "",
-                        "Total Amount": "",
-                        "Tax Amount": ""
-                    }
+        except Exception as e:
+            st.error(f"❌ Error reading PDF: {str(e)}")
 
-                    for line in extracted_text.split("\n"):
-                        l = line.lower()
+    # ======================================================
+    # DISPLAY + DOWNLOAD
+    # ======================================================
+    if "extracted_text" in st.session_state:
 
-                        if "invoice" in l and "no" in l:
-                            fields["Invoice Number"] = line
-                        elif "date" in l:
-                            fields["Invoice Date"] = line
-                        elif "gst" in l:
-                            fields["GST Number"] = line
-                        elif "total" in l and "amount" in l:
-                            fields["Total Amount"] = line
-                        elif "tax" in l:
-                            fields["Tax Amount"] = line
+        st.markdown("### 📖 Extracted Text Preview")
 
-                    df = pd.DataFrame(
-                        list(fields.items()),
-                        columns=["Field", "Value"]
-                    )
+        with st.expander("🔍 View page-wise extracted text", expanded=False):
+            for page_num, text in st.session_state.page_text_map.items():
+                st.markdown(f"**Page {page_num}**")
+                st.text_area(
+                    label=f"Page {page_num} text",
+                    value=text,
+                    height=180,
+                    key=f"text_page_{page_num}"
+                )
 
-                    st.dataframe(df, use_container_width=True)
+        st.markdown("### ⬇️ Download")
 
-                    excel_buffer = io.BytesIO()
-                    df.to_excel(
-                        excel_buffer,
-                        index=False,
-                        engine="openpyxl"
-                    )
-                    excel_buffer.seek(0)
-
-                    st.download_button(
-                        label="⬇️ Download as Excel",
-                        data=excel_buffer,
-                        file_name="invoice_data.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
-                    )
-
-            except Exception as e:
-                st.error(f"❌ Error during extraction: {str(e)}")
+        st.download_button(
+            label="⬇️ Download Extracted Text (.txt)",
+            data=st.session_state.extracted_text,
+            file_name="extracted_text.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
 
 # Feature 7: Extract Images
 elif feature == "🖼️ Extract Images":
@@ -955,6 +920,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
