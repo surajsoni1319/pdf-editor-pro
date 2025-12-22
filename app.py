@@ -136,6 +136,7 @@ if feature == "🔗 Merge PDFs":
         st.warning("⚠️ Please upload at least 2 PDF files to merge.")
 
 # Feature 2: Split PDF
+# Feature 2: Split PDF
 elif feature == "✂️ Split PDF":
     st.header("✂️ Split PDF into Pages")
     st.write("Split a PDF into individual page files with preview and bulk download.")
@@ -155,31 +156,20 @@ elif feature == "✂️ Split PDF":
             )
 
             # ==========================================================
-            # SPLIT ALL PAGES (WITH SLIDER-BASED PREVIEW)
+            # SPLIT ALL PAGES (STABLE + PAGINATED VIEW)
             # ==========================================================
             if split_option == "Split all pages":
 
-                show_preview = st.checkbox("🖼️ Show page preview", value=False)
+                show_preview = st.checkbox("🖼️ Show page previews", value=False)
 
-                # ---- Preview Slider (works for ANY page count) ----
-                preview_page = None
-                if show_preview:
-                    st.markdown("### 📄 Page Preview Navigation")
-                    preview_page = st.slider(
-                        "Select page to preview",
-                        min_value=1,
-                        max_value=num_pages,
-                        value=1
-                    )
-
-                # ---- Session State Init ----
+                # ---- Initialize session state ----
                 if "split_pages" not in st.session_state:
                     st.session_state.split_pages = None
 
                 if "zip_data" not in st.session_state:
                     st.session_state.zip_data = None
 
-                # ---- Split Button ----
+                # ---- Split button ----
                 if st.button("✂️ Split All Pages", use_container_width=True):
 
                     progress_bar = st.progress(0)
@@ -227,46 +217,66 @@ elif feature == "✂️ Split PDF":
                     st.success("✅ All pages split successfully!")
 
                 # ==========================================================
-                # PAGE PREVIEW (SINGLE PAGE ONLY – PERFORMANCE SAFE)
-                # ==========================================================
-                if show_preview and preview_page:
-                    try:
-                        img = convert_from_bytes(
-                            uploaded_file.getvalue(),
-                            dpi=100,
-                            first_page=preview_page,
-                            last_page=preview_page
-                        )[0]
-
-                        st.image(
-                            img,
-                            caption=f"Preview – Page {preview_page}",
-                            use_column_width=True
-                        )
-                    except Exception:
-                        st.warning("⚠️ Unable to render preview for this page.")
-
-                # ==========================================================
-                # DOWNLOAD SECTION
+                # RENDER RESULTS (20 PAGES AT A TIME)
                 # ==========================================================
                 if st.session_state.split_pages:
 
-                    st.markdown("### ⬇️ Download Individual Pages")
+                    PAGES_PER_VIEW = 20
+                    total_pages = len(st.session_state.split_pages)
+
+                    total_groups = (total_pages - 1) // PAGES_PER_VIEW + 1
+
+                    group_options = [
+                        f"Pages {i*PAGES_PER_VIEW + 1} – {min((i+1)*PAGES_PER_VIEW, total_pages)}"
+                        for i in range(total_groups)
+                    ]
+
+                    selected_group = st.selectbox(
+                        "📄 Select page range",
+                        group_options
+                    )
+
+                    group_index = group_options.index(selected_group)
+                    start_idx = group_index * PAGES_PER_VIEW
+                    end_idx = min(start_idx + PAGES_PER_VIEW, total_pages)
+
+                    pages_to_show = st.session_state.split_pages[start_idx:end_idx]
 
                     cols_per_row = 3
-                    for i in range(0, len(st.session_state.split_pages), cols_per_row):
+
+                    for i in range(0, len(pages_to_show), cols_per_row):
                         cols = st.columns(cols_per_row)
 
                         for col_idx in range(cols_per_row):
                             idx = i + col_idx
-                            if idx >= len(st.session_state.split_pages):
+                            if idx >= len(pages_to_show):
                                 continue
 
-                            page_data = st.session_state.split_pages[idx]
+                            page_data = pages_to_show[idx]
 
                             with cols[col_idx]:
+
+                                # ---- Optional Preview ----
+                                if show_preview:
+                                    try:
+                                        img = convert_from_bytes(
+                                            uploaded_file.getvalue(),
+                                            dpi=80,
+                                            first_page=page_data["page"],
+                                            last_page=page_data["page"]
+                                        )[0]
+
+                                        st.image(
+                                            img,
+                                            caption=f"Page {page_data['page']}",
+                                            use_column_width=True
+                                        )
+                                    except Exception:
+                                        st.empty()
+
+                                # ---- Download button ----
                                 st.download_button(
-                                    label=f"⬇️ Page {page_data['page']}",
+                                    label=f"⬇️ Download Page {page_data['page']}",
                                     data=page_data["pdf"],
                                     file_name=f"page_{page_data['page']}.pdf",
                                     mime="application/pdf",
@@ -668,6 +678,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
