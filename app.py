@@ -155,30 +155,31 @@ elif feature == "✂️ Split PDF":
             )
 
             # ==========================================================
-            # SPLIT ALL PAGES (STATEFUL + PREVIEW TOGGLE FIXED)
+            # SPLIT ALL PAGES (WITH SLIDER-BASED PREVIEW)
             # ==========================================================
             if split_option == "Split all pages":
 
-                show_preview = st.checkbox(
-                    "🖼️ Show page previews",
-                    value=False
-                )
+                show_preview = st.checkbox("🖼️ Show page preview", value=False)
 
-                MAX_PREVIEW_PAGES = 50
-                if num_pages > MAX_PREVIEW_PAGES:
-                    st.warning(
-                        f"⚠️ Preview disabled for PDFs with more than {MAX_PREVIEW_PAGES} pages."
+                # ---- Preview Slider (works for ANY page count) ----
+                preview_page = None
+                if show_preview:
+                    st.markdown("### 📄 Page Preview Navigation")
+                    preview_page = st.slider(
+                        "Select page to preview",
+                        min_value=1,
+                        max_value=num_pages,
+                        value=1
                     )
-                    show_preview = False
 
-                # ---- Initialize session state ----
+                # ---- Session State Init ----
                 if "split_pages" not in st.session_state:
                     st.session_state.split_pages = None
 
                 if "zip_data" not in st.session_state:
                     st.session_state.zip_data = None
 
-                # ---- Split button ----
+                # ---- Split Button ----
                 if st.button("✂️ Split All Pages", use_container_width=True):
 
                     progress_bar = st.progress(0)
@@ -217,7 +218,6 @@ elif feature == "✂️ Split PDF":
 
                     zip_buffer.seek(0)
 
-                    # ---- Persist results ----
                     st.session_state.split_pages = split_pages
                     st.session_state.zip_data = zip_buffer.getvalue()
 
@@ -227,12 +227,33 @@ elif feature == "✂️ Split PDF":
                     st.success("✅ All pages split successfully!")
 
                 # ==========================================================
-                # RENDER RESULTS (PERSISTENT UI)
+                # PAGE PREVIEW (SINGLE PAGE ONLY – PERFORMANCE SAFE)
+                # ==========================================================
+                if show_preview and preview_page:
+                    try:
+                        img = convert_from_bytes(
+                            uploaded_file.getvalue(),
+                            dpi=100,
+                            first_page=preview_page,
+                            last_page=preview_page
+                        )[0]
+
+                        st.image(
+                            img,
+                            caption=f"Preview – Page {preview_page}",
+                            use_column_width=True
+                        )
+                    except Exception:
+                        st.warning("⚠️ Unable to render preview for this page.")
+
+                # ==========================================================
+                # DOWNLOAD SECTION
                 # ==========================================================
                 if st.session_state.split_pages:
 
-                    cols_per_row = 3
+                    st.markdown("### ⬇️ Download Individual Pages")
 
+                    cols_per_row = 3
                     for i in range(0, len(st.session_state.split_pages), cols_per_row):
                         cols = st.columns(cols_per_row)
 
@@ -244,28 +265,8 @@ elif feature == "✂️ Split PDF":
                             page_data = st.session_state.split_pages[idx]
 
                             with cols[col_idx]:
-
-                                # ---- Preview toggled only by checkbox ----
-                                if show_preview:
-                                    try:
-                                        img = convert_from_bytes(
-                                            uploaded_file.getvalue(),
-                                            dpi=80,
-                                            first_page=page_data["page"],
-                                            last_page=page_data["page"]
-                                        )[0]
-
-                                        st.image(
-                                            img,
-                                            caption=f"Page {page_data['page']}",
-                                            use_column_width=True
-                                        )
-                                    except Exception:
-                                        st.empty()
-
-                                # ---- Download button ALWAYS visible ----
                                 st.download_button(
-                                    label=f"⬇️ Download Page {page_data['page']}",
+                                    label=f"⬇️ Page {page_data['page']}",
                                     data=page_data["pdf"],
                                     file_name=f"page_{page_data['page']}.pdf",
                                     mime="application/pdf",
@@ -667,6 +668,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
