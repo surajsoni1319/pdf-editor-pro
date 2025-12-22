@@ -476,7 +476,7 @@ elif feature == "💧 Add Watermark":
         with col3:
             rotation = st.slider("Rotation angle", -90, 90, 45)
 
-        if st.button("💧 Add Watermark", use_container_width=True):
+        if st.button("Add Watermark", use_container_width=True):
             if not watermark_text.strip():
                 st.warning("⚠️ Please enter watermark text.")
             else:
@@ -752,6 +752,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
