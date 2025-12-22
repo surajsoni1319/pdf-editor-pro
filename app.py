@@ -5,7 +5,9 @@ import io
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.colors import yellow, red, green, blue
+import zipfile
 import pdf2image
+from pdf2image import convert_from_bytes
 import img2pdf
 import os
 
@@ -136,9 +138,9 @@ if feature == "🔗 Merge PDFs":
 # Feature 2: Split PDF
 elif feature == "✂️ Split PDF":
     st.header("✂️ Split PDF into Pages")
-    st.write("Split a PDF into individual page files.")
+    st.write("Split a PDF into individual page files with preview and bulk download.")
     
-    uploaded_file = st.file_uploader("Choose a PDF file", type=['pdf'])
+    uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
     
     if uploaded_file:
         try:
@@ -151,41 +153,90 @@ elif feature == "✂️ Split PDF":
                 "Split option:",
                 ["Split all pages", "Split specific range"]
             )
-            
-            # ---------------------------
-            # SPLIT ALL PAGES (UPDATED UI)
-            # ---------------------------
+
+            # ==========================================================
+            # SPLIT ALL PAGES (WITH PREVIEW + ZIP + PROGRESS BAR)
+            # ==========================================================
             if split_option == "Split all pages":
                 if st.button("✂️ Split All Pages", use_container_width=True):
-                    with st.spinner("Splitting PDF..."):
-                        
-                        cols_per_row = 3  # 👈 change to 2 or 4 if needed
-                        
+
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+
+                    # --- Generate thumbnails ---
+                    with st.spinner("Generating page previews..."):
+                        images = convert_from_bytes(
+                            uploaded_file.getvalue(),
+                            dpi=100,
+                            fmt="png"
+                        )
+
+                    zip_buffer = io.BytesIO()
+
+                    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+
+                        cols_per_row = 3
                         for i in range(0, num_pages, cols_per_row):
                             cols = st.columns(cols_per_row)
-                            
+
                             for col_idx in range(cols_per_row):
                                 page_index = i + col_idx
-                                
+
                                 if page_index < num_pages:
                                     writer = PyPDF2.PdfWriter()
                                     writer.add_page(reader.pages[page_index])
-                                    
+
                                     output = io.BytesIO()
                                     writer.write(output)
                                     output.seek(0)
-                                    
-                                    cols[col_idx].download_button(
-                                        label=f"⬇️ Download Page {page_index + 1}",
-                                        data=output.getvalue(),
-                                        file_name=f"page_{page_index + 1}.pdf",
-                                        mime="application/pdf",
-                                        use_container_width=True
+
+                                    # Add to ZIP
+                                    zip_file.writestr(
+                                        f"page_{page_index + 1}.pdf",
+                                        output.getvalue()
                                     )
-            
-            # ---------------------------
+
+                                    # UI: Thumbnail + download button
+                                    with cols[col_idx]:
+                                        st.image(
+                                            images[page_index],
+                                            caption=f"Page {page_index + 1}",
+                                            use_column_width=True
+                                        )
+
+                                        st.download_button(
+                                            label=f"⬇️ Download Page {page_index + 1}",
+                                            data=output.getvalue(),
+                                            file_name=f"page_{page_index + 1}.pdf",
+                                            mime="application/pdf",
+                                            use_container_width=True
+                                        )
+
+                                    # Progress update
+                                    progress = int(((page_index + 1) / num_pages) * 100)
+                                    progress_bar.progress(progress)
+                                    status_text.text(
+                                        f"Processing page {page_index + 1} of {num_pages}"
+                                    )
+
+                    zip_buffer.seek(0)
+
+                    st.success("✅ All pages split successfully!")
+
+                    st.download_button(
+                        label="📦 Download All Pages as ZIP",
+                        data=zip_buffer.getvalue(),
+                        file_name="split_pages.zip",
+                        mime="application/zip",
+                        use_container_width=True
+                    )
+
+                    progress_bar.empty()
+                    status_text.empty()
+
+            # ==========================================================
             # SPLIT SPECIFIC RANGE (UNCHANGED)
-            # ---------------------------
+            # ==========================================================
             else:
                 col1, col2 = st.columns(2)
                 with col1:
@@ -218,10 +269,9 @@ elif feature == "✂️ Split PDF":
                         "⬇️ Download Split PDF"
                     )
                     st.success("✅ Pages extracted successfully!")
-        
+
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
-
 
 # Feature 3: Extract Pages
 elif feature == "📑 Extract Pages":
@@ -571,6 +621,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
