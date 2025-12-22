@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 import PyPDF2
 from PIL import Image
 import io
@@ -954,6 +955,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
