@@ -563,36 +563,103 @@ elif feature == "💧 Add Watermark":
 # Feature 6: Extract Text
 elif feature == "📝 Extract Text":
     st.header("📝 Extract Text from PDF")
-    st.write("Extract all text content from your PDF.")
-    
-    uploaded_file = st.file_uploader("Choose a PDF file", type=['pdf'])
-    
+    st.write("Extract text from all pages or selected pages of a PDF.")
+
+    uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
+
     if uploaded_file:
-        if st.button("📝 Extract Text", use_container_width=True):
-            try:
-                reader = PyPDF2.PdfReader(uploaded_file)
-                text = ""
-                
-                with st.spinner("Extracting text..."):
-                    for i, page in enumerate(reader.pages, 1):
-                        page_text = page.extract_text()
-                        text += f"\n\n--- Page {i} ---\n\n{page_text}"
-                
-                st.text_area("Extracted Text:", text, height=400)
-                
-                # Download as text file
-                st.download_button(
-                    label="⬇️ Download as TXT",
-                    data=text,
-                    file_name="extracted_text.txt",
-                    mime="text/plain",
-                    use_container_width=True
+        try:
+            reader = PyPDF2.PdfReader(uploaded_file)
+            total_pages = len(reader.pages)
+
+            st.info(f"📄 Total pages: {total_pages}")
+
+            extract_option = st.radio(
+                "Extraction mode",
+                ["Extract all pages", "Extract specific pages"],
+                horizontal=True
+            )
+
+            pages_to_extract = None
+            if extract_option == "Extract specific pages":
+                pages_to_extract = st.text_input(
+                    "Enter page numbers (e.g. 1,3,5-7)",
+                    placeholder="1,3,5-7"
                 )
-                
-                st.success(f"✅ Text extracted from {len(reader.pages)} pages!")
-            
-            except Exception as e:
-                st.error(f"❌ Error: {str(e)}")
+
+            if st.button("📝 Extract Text", use_container_width=True):
+                extracted_text = ""
+                page_text_map = {}
+
+                with st.spinner("Extracting text..."):
+                    if extract_option == "Extract all pages":
+                        page_numbers = list(range(1, total_pages + 1))
+                    else:
+                        if not pages_to_extract:
+                            st.warning("⚠️ Please enter page numbers.")
+                            st.stop()
+
+                        page_numbers = []
+                        for part in pages_to_extract.split(","):
+                            part = part.strip()
+                            if "-" in part:
+                                start, end = map(int, part.split("-"))
+                                page_numbers.extend(range(start, end + 1))
+                            else:
+                                page_numbers.append(int(part))
+
+                        page_numbers = sorted(set(page_numbers))
+
+                        if not all(1 <= p <= total_pages for p in page_numbers):
+                            st.error("❌ Invalid page numbers detected.")
+                            st.stop()
+
+                    for page_num in page_numbers:
+                        page = reader.pages[page_num - 1]
+                        page_text = page.extract_text()
+
+                        if not page_text or not page_text.strip():
+                            page_text = "[No extractable text found on this page]"
+
+                        page_text_map[page_num] = page_text
+                        extracted_text += f"\n\n--- Page {page_num} ---\n\n{page_text}"
+
+                # Save in session
+                st.session_state.extracted_text = extracted_text
+                st.session_state.page_text_map = page_text_map
+
+                st.success(f"✅ Text extracted from {len(page_numbers)} page(s)!")
+
+        except Exception as e:
+            st.error(f"❌ Error reading PDF: {str(e)}")
+
+    # ======================================================
+    # DISPLAY + DOWNLOAD
+    # ======================================================
+    if "extracted_text" in st.session_state:
+
+        st.markdown("### 📖 Extracted Text Preview")
+
+        with st.expander("🔍 View page-wise extracted text", expanded=False):
+            for page_num, text in st.session_state.page_text_map.items():
+                st.markdown(f"**Page {page_num}**")
+                st.text_area(
+                    label=f"Page {page_num} text",
+                    value=text,
+                    height=180,
+                    key=f"text_page_{page_num}"
+                )
+
+        st.markdown("### ⬇️ Download")
+
+        st.download_button(
+            label="⬇️ Download Extracted Text (.txt)",
+            data=st.session_state.extracted_text,
+            file_name="extracted_text.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+
 
 # Feature 7: Extract Images
 elif feature == "🖼️ Extract Images":
@@ -853,6 +920,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
