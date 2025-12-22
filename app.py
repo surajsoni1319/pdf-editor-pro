@@ -15,43 +15,31 @@ st.set_page_config(page_title="Star Cement PDF Editor Pro", page_icon="📄", la
 st.markdown("""
 <style>
 
-/* Remove Streamlit top padding */
-.block-container {
-    padding-top: 1.5rem;
-}
-
-/* Force full-width title container */
-.hero-container {
-    width: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-/* Big Hero Headline */
+/* Responsive, animated, gradient headline */
 .main-header {
-    font-size: clamp(3.5rem, 8vw, 6.5rem); /* 🔥 MUCH BIGGER */
-    font-weight: 900;
+    font-size: clamp(2.5rem, 6vw, 5rem);  /* 📱 Mobile → 🖥 Desktop */
+    font-weight: 800;
     text-align: center;
-    margin: 1.5rem 0 2.5rem 0;
+    margin-bottom: 2rem;
 
     /* Gradient text */
     background: linear-gradient(
         90deg,
-        #ff6a00,
-        #ffb347,
+        #ff4b4b,
+        #ff8c00,
         #ffd700,
-        #ff8c00
+        #00c853,
+        #2979ff
     );
     background-size: 300% 300%;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 
     /* Animation */
-    animation: gradientMove 6s ease infinite, fadeIn 1.2s ease-out;
+    animation: gradientMove 6s ease infinite, fadeIn 1.5s ease-in-out;
 
-    /* Strong shadow for visibility */
-    text-shadow: 0px 6px 18px rgba(0, 0, 0, 0.35);
+    /* Shadow */
+    text-shadow: 0px 4px 12px rgba(0, 0, 0, 0.25);
 }
 
 /* Gradient animation */
@@ -61,11 +49,11 @@ st.markdown("""
     100% { background-position: 0% 50%; }
 }
 
-/* Fade animation */
+/* Fade-in animation */
 @keyframes fadeIn {
     from {
         opacity: 0;
-        transform: translateY(-15px);
+        transform: translateY(-10px);
     }
     to {
         opacity: 1;
@@ -549,6 +537,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
