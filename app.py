@@ -13,21 +13,55 @@ st.set_page_config(page_title="Star Cement PDF Editor Pro", page_icon="📄", la
 
 # Custom CSS for better UI
 st.markdown("""
-    <style>
-    .main-header {
-        font-size: 10rem;
-        font-weight: bold;
-        text-align: center;
-        color: #FF4B4B;
-        margin-bottom: 2rem;
+<style>
+
+/* Responsive, animated, gradient headline */
+.main-header {
+    font-size: clamp(2.5rem, 6vw, 5rem);  /* 📱 Mobile → 🖥 Desktop */
+    font-weight: 800;
+    text-align: center;
+    margin-bottom: 2rem;
+
+    /* Gradient text */
+    background: linear-gradient(
+        90deg,
+        #ff4b4b,
+        #ff8c00,
+        #ffd700,
+        #00c853,
+        #2979ff
+    );
+    background-size: 300% 300%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+
+    /* Animation */
+    animation: gradientMove 6s ease infinite, fadeIn 1.5s ease-in-out;
+
+    /* Shadow */
+    text-shadow: 0px 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+/* Gradient animation */
+@keyframes gradientMove {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* Fade-in animation */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
     }
-    .feature-box {
-        background-color: #f0f2f6;
-        padding: 20px;
-        border-radius: 10px;
-        margin: 10px 0;
+    to {
+        opacity: 1;
+        transform: translateY(0);
     }
-    </style>
+}
+
+</style>
 """, unsafe_allow_html=True)
 
 st.markdown('<p class="main-header">📄 Star Cement PDF Editor Pro</p>', unsafe_allow_html=True)
@@ -503,6 +537,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
