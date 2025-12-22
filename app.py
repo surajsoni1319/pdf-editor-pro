@@ -83,7 +83,9 @@ feature = st.sidebar.radio(
         "🖼️ Extract Images",
         "🗜️ Compress PDF",
         "📸 PDF to Images",
-        "✨ Highlight Text"
+        "✨ Highlight Text",
+        "🔀 Reorder Pages"
+
     ]
 )
 
@@ -592,6 +594,104 @@ elif feature == "📝 Extract Text":
             except Exception as e:
                 st.error(f"❌ Error: {str(e)}")
 
+# Feature: Reorder PDF Pages
+elif feature == "🔀 Reorder Pages":
+    st.header("🔀 Reorder PDF Pages")
+    st.write("Change the order of pages and preview before downloading.")
+
+    uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
+
+    if uploaded_file:
+        try:
+            reader = PyPDF2.PdfReader(uploaded_file)
+            total_pages = len(reader.pages)
+
+            st.info(f"📄 Total pages: {total_pages}")
+
+            st.markdown("### 🔢 Enter New Page Order")
+            st.caption("Example: 3,1,2 or 5,4,3,2,1")
+
+            page_order_input = st.text_input(
+                "New page order (comma-separated)",
+                placeholder="1,2,3,4"
+            )
+
+            preview_pages = st.checkbox("👀 Preview reordered pages", value=True)
+
+            if st.button("🔀 Apply Reorder", use_container_width=True):
+                if not page_order_input:
+                    st.warning("⚠️ Please enter page order.")
+                else:
+                    try:
+                        # Parse input
+                        page_numbers = [
+                            int(p.strip()) for p in page_order_input.split(",")
+                        ]
+
+                        # Validation
+                        if len(page_numbers) != total_pages:
+                            st.error("❌ Page count mismatch.")
+                        elif sorted(page_numbers) != list(range(1, total_pages + 1)):
+                            st.error("❌ Invalid page numbers or duplicates detected.")
+                        else:
+                            writer = PyPDF2.PdfWriter()
+
+                            for p in page_numbers:
+                                writer.add_page(reader.pages[p - 1])
+
+                            output = io.BytesIO()
+                            writer.write(output)
+                            output.seek(0)
+
+                            # Save for preview & download
+                            st.session_state.reordered_pdf = output.getvalue()
+
+                            st.success("✅ Pages reordered successfully!")
+
+                    except ValueError:
+                        st.error("❌ Only numbers and commas are allowed.")
+
+        except Exception as e:
+            st.error(f"❌ Error reading PDF: {str(e)}")
+
+    # ======================================================
+    # PREVIEW + DOWNLOAD
+    # ======================================================
+    if "reordered_pdf" in st.session_state:
+
+        st.markdown("### 👀 Preview Reordered PDF")
+
+        preview_count = st.slider(
+            "Pages to preview",
+            min_value=1,
+            max_value=min(5, total_pages),
+            value=min(2, total_pages)
+        )
+
+        try:
+            images = convert_from_bytes(
+                st.session_state.reordered_pdf,
+                dpi=90,
+                first_page=1,
+                last_page=preview_count
+            )
+
+            for i, img in enumerate(images, 1):
+                st.image(
+                    img,
+                    caption=f"Preview – Page {i}",
+                    use_column_width=True
+                )
+
+        except Exception:
+            st.warning("⚠️ Preview not available on this system.")
+
+        create_download_button(
+            st.session_state.reordered_pdf,
+            "reordered_document.pdf",
+            "⬇️ Download Reordered PDF"
+        )
+
 # Feature 7: Extract Images
 elif feature == "🖼️ Extract Images":
     st.header("🖼️ Extract Images from PDF")
@@ -752,6 +852,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
