@@ -155,12 +155,12 @@ elif feature == "✂️ Split PDF":
             )
 
             # ==========================================================
-            # SPLIT ALL PAGES (OPTIMIZED + OPTIONAL PREVIEW)
+            # SPLIT ALL PAGES (STATEFUL + PREVIEW TOGGLE FIXED)
             # ==========================================================
             if split_option == "Split all pages":
 
                 show_preview = st.checkbox(
-                    "🖼️ Show page previews ",
+                    "🖼️ Show page previews",
                     value=False
                 )
 
@@ -171,86 +171,114 @@ elif feature == "✂️ Split PDF":
                     )
                     show_preview = False
 
+                # ---- Initialize session state ----
+                if "split_pages" not in st.session_state:
+                    st.session_state.split_pages = None
+
+                if "zip_data" not in st.session_state:
+                    st.session_state.zip_data = None
+
+                # ---- Split button ----
                 if st.button("✂️ Split All Pages", use_container_width=True):
 
                     progress_bar = st.progress(0)
                     status_text = st.empty()
 
+                    split_pages = []
                     zip_buffer = io.BytesIO()
 
                     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                        for page_index in range(num_pages):
 
-                        cols_per_row = 3
+                            writer = PyPDF2.PdfWriter()
+                            writer.add_page(reader.pages[page_index])
 
-                        for i in range(0, num_pages, cols_per_row):
-                            cols = st.columns(cols_per_row)
+                            output = io.BytesIO()
+                            writer.write(output)
+                            output.seek(0)
 
-                            for col_idx in range(cols_per_row):
-                                page_index = i + col_idx
-                                if page_index >= num_pages:
-                                    continue
+                            pdf_bytes = output.getvalue()
 
-                                # ---- Create single-page PDF ----
-                                writer = PyPDF2.PdfWriter()
-                                writer.add_page(reader.pages[page_index])
+                            split_pages.append({
+                                "page": page_index + 1,
+                                "pdf": pdf_bytes
+                            })
 
-                                output = io.BytesIO()
-                                writer.write(output)
-                                output.seek(0)
+                            zip_file.writestr(
+                                f"page_{page_index + 1}.pdf",
+                                pdf_bytes
+                            )
 
-                                zip_file.writestr(
-                                    f"page_{page_index + 1}.pdf",
-                                    output.getvalue()
-                                )
-
-                                with cols[col_idx]:
-
-                                    # ---- Generate preview ONLY if enabled ----
-                                    if show_preview:
-                                        try:
-                                            image = convert_from_bytes(
-                                                uploaded_file.getvalue(),
-                                                dpi=80,  # lower DPI = less memory
-                                                first_page=page_index + 1,
-                                                last_page=page_index + 1
-                                            )[0]
-
-                                            st.image(
-                                                image,
-                                                caption=f"Page {page_index + 1}",
-                                                use_column_width=True
-                                            )
-                                        except Exception:
-                                            st.empty()
-
-                                    st.download_button(
-                                        label=f"⬇️ Download Page {page_index + 1}",
-                                        data=output.getvalue(),
-                                        file_name=f"page_{page_index + 1}.pdf",
-                                        mime="application/pdf",
-                                        use_container_width=True
-                                    )
-
-                                progress = int(((page_index + 1) / num_pages) * 100)
-                                progress_bar.progress(progress)
-                                status_text.text(
-                                    f"Processing page {page_index + 1} of {num_pages}"
-                                )
+                            progress = int(((page_index + 1) / num_pages) * 100)
+                            progress_bar.progress(progress)
+                            status_text.text(
+                                f"Processing page {page_index + 1} of {num_pages}"
+                            )
 
                     zip_buffer.seek(0)
 
+                    # ---- Persist results ----
+                    st.session_state.split_pages = split_pages
+                    st.session_state.zip_data = zip_buffer.getvalue()
+
+                    progress_bar.empty()
+                    status_text.empty()
+
                     st.success("✅ All pages split successfully!")
+
+                # ==========================================================
+                # RENDER RESULTS (PERSISTENT UI)
+                # ==========================================================
+                if st.session_state.split_pages:
+
+                    cols_per_row = 3
+
+                    for i in range(0, len(st.session_state.split_pages), cols_per_row):
+                        cols = st.columns(cols_per_row)
+
+                        for col_idx in range(cols_per_row):
+                            idx = i + col_idx
+                            if idx >= len(st.session_state.split_pages):
+                                continue
+
+                            page_data = st.session_state.split_pages[idx]
+
+                            with cols[col_idx]:
+
+                                # ---- Preview toggled only by checkbox ----
+                                if show_preview:
+                                    try:
+                                        img = convert_from_bytes(
+                                            uploaded_file.getvalue(),
+                                            dpi=80,
+                                            first_page=page_data["page"],
+                                            last_page=page_data["page"]
+                                        )[0]
+
+                                        st.image(
+                                            img,
+                                            caption=f"Page {page_data['page']}",
+                                            use_column_width=True
+                                        )
+                                    except Exception:
+                                        st.empty()
+
+                                # ---- Download button ALWAYS visible ----
+                                st.download_button(
+                                    label=f"⬇️ Download Page {page_data['page']}",
+                                    data=page_data["pdf"],
+                                    file_name=f"page_{page_data['page']}.pdf",
+                                    mime="application/pdf",
+                                    use_container_width=True
+                                )
 
                     st.download_button(
                         label="📦 Download All Pages as ZIP",
-                        data=zip_buffer.getvalue(),
+                        data=st.session_state.zip_data,
                         file_name="split_pages.zip",
                         mime="application/zip",
                         use_container_width=True
                     )
-
-                    progress_bar.empty()
-                    status_text.empty()
 
             # ==========================================================
             # SPLIT SPECIFIC RANGE (UNCHANGED)
@@ -639,6 +667,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
