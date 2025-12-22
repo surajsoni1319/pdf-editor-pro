@@ -9,7 +9,7 @@ import pdf2image
 import img2pdf
 import os
 
-st.set_page_config(page_title="PDF Editor Pro", page_icon="📄", layout="wide")
+st.set_page_config(page_title="Star Cement PDF Editor Pro", page_icon="📄", layout="wide")
 
 # Custom CSS for better UI
 st.markdown("""
@@ -503,6 +503,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
