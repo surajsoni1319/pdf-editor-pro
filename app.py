@@ -86,6 +86,7 @@ feature = st.sidebar.radio(
         "✨ Highlight Text"
     ]
 )
+uploader_key = f"file_uploader_{feature}"
 
 # 🔄 RESET STATE WHEN TOOL CHANGES
 if "prev_feature" not in st.session_state:
@@ -116,7 +117,11 @@ if feature == "🔗 Merge PDFs":
     st.header("🔗 Merge Multiple PDFs")
     st.write("Upload multiple PDF files to merge them into one.")
     
-    uploaded_files = st.file_uploader("Choose PDF files", type=['pdf'], accept_multiple_files=True)
+    uploaded_file = st.file_uploader(
+    "Choose a PDF file",
+    type=["pdf"],
+    key=uploader_key
+)
     
     if uploaded_files and len(uploaded_files) > 1:
         st.success(f"✅ {len(uploaded_files)} files uploaded")
@@ -688,6 +693,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
