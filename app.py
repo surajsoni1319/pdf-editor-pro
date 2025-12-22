@@ -147,47 +147,81 @@ elif feature == "✂️ Split PDF":
             
             st.info(f"📄 Total pages: {num_pages}")
             
-            split_option = st.radio("Split option:", ["Split all pages", "Split specific range"])
+            split_option = st.radio(
+                "Split option:",
+                ["Split all pages", "Split specific range"]
+            )
             
+            # ---------------------------
+            # SPLIT ALL PAGES (UPDATED UI)
+            # ---------------------------
             if split_option == "Split all pages":
                 if st.button("✂️ Split All Pages", use_container_width=True):
                     with st.spinner("Splitting PDF..."):
-                        for i in range(num_pages):
-                            writer = PyPDF2.PdfWriter()
-                            writer.add_page(reader.pages[i])
+                        
+                        cols_per_row = 3  # 👈 change to 2 or 4 if needed
+                        
+                        for i in range(0, num_pages, cols_per_row):
+                            cols = st.columns(cols_per_row)
                             
-                            output = io.BytesIO()
-                            writer.write(output)
-                            output.seek(0)
-                            
-                            st.download_button(
-                                label=f"⬇️ Download Page {i+1}",
-                                data=output.getvalue(),
-                                file_name=f"page_{i+1}.pdf",
-                                mime="application/pdf"
-                            )
+                            for col_idx in range(cols_per_row):
+                                page_index = i + col_idx
+                                
+                                if page_index < num_pages:
+                                    writer = PyPDF2.PdfWriter()
+                                    writer.add_page(reader.pages[page_index])
+                                    
+                                    output = io.BytesIO()
+                                    writer.write(output)
+                                    output.seek(0)
+                                    
+                                    cols[col_idx].download_button(
+                                        label=f"⬇️ Download Page {page_index + 1}",
+                                        data=output.getvalue(),
+                                        file_name=f"page_{page_index + 1}.pdf",
+                                        mime="application/pdf",
+                                        use_container_width=True
+                                    )
             
+            # ---------------------------
+            # SPLIT SPECIFIC RANGE (UNCHANGED)
+            # ---------------------------
             else:
                 col1, col2 = st.columns(2)
                 with col1:
-                    start_page = st.number_input("Start page", min_value=1, max_value=num_pages, value=1)
+                    start_page = st.number_input(
+                        "Start page",
+                        min_value=1,
+                        max_value=num_pages,
+                        value=1
+                    )
                 with col2:
-                    end_page = st.number_input("End page", min_value=1, max_value=num_pages, value=num_pages)
+                    end_page = st.number_input(
+                        "End page",
+                        min_value=1,
+                        max_value=num_pages,
+                        value=num_pages
+                    )
                 
                 if st.button("✂️ Split Range", use_container_width=True):
                     writer = PyPDF2.PdfWriter()
-                    for i in range(start_page-1, end_page):
+                    for i in range(start_page - 1, end_page):
                         writer.add_page(reader.pages[i])
                     
                     output = io.BytesIO()
                     writer.write(output)
                     output.seek(0)
                     
-                    create_download_button(output.getvalue(), f"pages_{start_page}_to_{end_page}.pdf", "⬇️ Download Split PDF")
+                    create_download_button(
+                        output.getvalue(),
+                        f"pages_{start_page}_to_{end_page}.pdf",
+                        "⬇️ Download Split PDF"
+                    )
                     st.success("✅ Pages extracted successfully!")
         
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
+
 
 # Feature 3: Extract Pages
 elif feature == "📑 Extract Pages":
@@ -537,6 +571,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
