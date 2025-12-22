@@ -112,46 +112,6 @@ def create_download_button(file_data, filename, label):
     )
 
 # Feature 1: Merge PDFs
-# if feature == "🔗 Merge PDFs":
-#     st.header("🔗 Merge Multiple PDFs")
-#     st.write("Upload multiple PDF files to merge them into one.")
-    
-#     uploaded_file = st.file_uploader(
-#     "Choose a PDF file",
-#     type=["pdf"],
-#     key=uploader_key
-# )
-    
-#     if uploaded_files and len(uploaded_files) > 1:
-#         st.success(f"✅ {len(uploaded_files)} files uploaded")
-        
-#         # Show file order
-#         st.write("**Files will be merged in this order:**")
-#         for i, file in enumerate(uploaded_files, 1):
-#             st.write(f"{i}. {file.name}")
-        
-#         if st.button("🔗 Merge PDFs", use_container_width=True):
-#             try:
-#                 merger = PyPDF2.PdfMerger()
-                
-#                 for pdf in uploaded_files:
-#                     merger.append(pdf)
-                
-#                 output = io.BytesIO()
-#                 merger.write(output)
-#                 merger.close()
-#                 output.seek(0)
-                
-#                 create_download_button(output.getvalue(), "merged_document.pdf", "⬇️ Download Merged PDF")
-#                 st.success("✅ PDFs merged successfully!")
-                
-#             except Exception as e:
-#                 st.error(f"❌ Error: {str(e)}")
-#     elif uploaded_files and len(uploaded_files) == 1:
-#         st.warning("⚠️ Please upload at least 2 PDF files to merge.")
-
-
-# Feature 1: Merge PDFs
 if feature == "🔗 Merge PDFs":
     st.header("🔗 Merge Multiple PDFs")
     st.write("Upload multiple PDF files to merge them into one.")
@@ -750,6 +710,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
