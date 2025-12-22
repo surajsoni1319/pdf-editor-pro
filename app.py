@@ -15,7 +15,7 @@ st.set_page_config(page_title="PDF Editor Pro", page_icon="📄", layout="wide")
 st.markdown("""
     <style>
     .main-header {
-        font-size: 5rem;
+        font-size: 10rem;
         font-weight: bold;
         text-align: center;
         color: #FF4B4B;
@@ -503,5 +503,6 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
