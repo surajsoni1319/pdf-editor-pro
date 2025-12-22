@@ -86,7 +86,6 @@ feature = st.sidebar.radio(
         "✨ Highlight Text"
     ]
 )
-uploader_key = f"file_uploader_{feature}"
 
 # 🔄 RESET STATE WHEN TOOL CHANGES
 if "prev_feature" not in st.session_state:
@@ -693,6 +692,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
