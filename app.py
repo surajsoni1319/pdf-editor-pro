@@ -87,6 +87,17 @@ feature = st.sidebar.radio(
     ]
 )
 
+# 🔄 RESET STATE WHEN TOOL CHANGES
+if "prev_feature" not in st.session_state:
+    st.session_state.prev_feature = feature
+
+if st.session_state.prev_feature != feature:
+    for key in list(st.session_state.keys()):
+        if key != "prev_feature":
+            del st.session_state[key]
+    st.session_state.prev_feature = feature
+    st.rerun()
+
 st.sidebar.markdown("---")
 st.sidebar.info("💡 **Tip:** Upload your PDF(s) and select the operation you want to perform.")
 
@@ -135,7 +146,6 @@ if feature == "🔗 Merge PDFs":
     elif uploaded_files and len(uploaded_files) == 1:
         st.warning("⚠️ Please upload at least 2 PDF files to merge.")
 
-# Feature 2: Split PDF
 # Feature 2: Split PDF
 elif feature == "✂️ Split PDF":
     st.header("✂️ Split PDF into Pages")
@@ -678,6 +688,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
