@@ -160,7 +160,7 @@ elif feature == "✂️ Split PDF":
             if split_option == "Split all pages":
 
                 show_preview = st.checkbox(
-                    "🖼️ Show page previews (uses more memory)",
+                    "🖼️ Show page previews ",
                     value=False
                 )
 
@@ -639,6 +639,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
