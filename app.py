@@ -139,85 +139,103 @@ if feature == "🔗 Merge PDFs":
 elif feature == "✂️ Split PDF":
     st.header("✂️ Split PDF into Pages")
     st.write("Split a PDF into individual page files with preview and bulk download.")
-    
+
     uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
-    
+
     if uploaded_file:
         try:
             reader = PyPDF2.PdfReader(uploaded_file)
             num_pages = len(reader.pages)
-            
+
             st.info(f"📄 Total pages: {num_pages}")
-            
+
             split_option = st.radio(
                 "Split option:",
                 ["Split all pages", "Split specific range"]
             )
 
             # ==========================================================
-            # SPLIT ALL PAGES (WITH PREVIEW + ZIP + PROGRESS BAR)
+            # SPLIT ALL PAGES (OPTIMIZED + OPTIONAL PREVIEW)
             # ==========================================================
             if split_option == "Split all pages":
+
+                show_preview = st.checkbox(
+                    "🖼️ Show page previews (uses more memory)",
+                    value=False
+                )
+
+                MAX_PREVIEW_PAGES = 50
+                if num_pages > MAX_PREVIEW_PAGES:
+                    st.warning(
+                        f"⚠️ Preview disabled for PDFs with more than {MAX_PREVIEW_PAGES} pages."
+                    )
+                    show_preview = False
+
                 if st.button("✂️ Split All Pages", use_container_width=True):
 
                     progress_bar = st.progress(0)
                     status_text = st.empty()
-
-                    # --- Generate thumbnails ---
-                    with st.spinner("Generating page previews..."):
-                        images = convert_from_bytes(
-                            uploaded_file.getvalue(),
-                            dpi=100,
-                            fmt="png"
-                        )
 
                     zip_buffer = io.BytesIO()
 
                     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
 
                         cols_per_row = 3
+
                         for i in range(0, num_pages, cols_per_row):
                             cols = st.columns(cols_per_row)
 
                             for col_idx in range(cols_per_row):
                                 page_index = i + col_idx
+                                if page_index >= num_pages:
+                                    continue
 
-                                if page_index < num_pages:
-                                    writer = PyPDF2.PdfWriter()
-                                    writer.add_page(reader.pages[page_index])
+                                # ---- Create single-page PDF ----
+                                writer = PyPDF2.PdfWriter()
+                                writer.add_page(reader.pages[page_index])
 
-                                    output = io.BytesIO()
-                                    writer.write(output)
-                                    output.seek(0)
+                                output = io.BytesIO()
+                                writer.write(output)
+                                output.seek(0)
 
-                                    # Add to ZIP
-                                    zip_file.writestr(
-                                        f"page_{page_index + 1}.pdf",
-                                        output.getvalue()
+                                zip_file.writestr(
+                                    f"page_{page_index + 1}.pdf",
+                                    output.getvalue()
+                                )
+
+                                with cols[col_idx]:
+
+                                    # ---- Generate preview ONLY if enabled ----
+                                    if show_preview:
+                                        try:
+                                            image = convert_from_bytes(
+                                                uploaded_file.getvalue(),
+                                                dpi=80,  # lower DPI = less memory
+                                                first_page=page_index + 1,
+                                                last_page=page_index + 1
+                                            )[0]
+
+                                            st.image(
+                                                image,
+                                                caption=f"Page {page_index + 1}",
+                                                use_column_width=True
+                                            )
+                                        except Exception:
+                                            st.empty()
+
+                                    st.download_button(
+                                        label=f"⬇️ Download Page {page_index + 1}",
+                                        data=output.getvalue(),
+                                        file_name=f"page_{page_index + 1}.pdf",
+                                        mime="application/pdf",
+                                        use_container_width=True
                                     )
 
-                                    # UI: Thumbnail + download button
-                                    with cols[col_idx]:
-                                        st.image(
-                                            images[page_index],
-                                            caption=f"Page {page_index + 1}",
-                                            use_column_width=True
-                                        )
-
-                                        st.download_button(
-                                            label=f"⬇️ Download Page {page_index + 1}",
-                                            data=output.getvalue(),
-                                            file_name=f"page_{page_index + 1}.pdf",
-                                            mime="application/pdf",
-                                            use_container_width=True
-                                        )
-
-                                    # Progress update
-                                    progress = int(((page_index + 1) / num_pages) * 100)
-                                    progress_bar.progress(progress)
-                                    status_text.text(
-                                        f"Processing page {page_index + 1} of {num_pages}"
-                                    )
+                                progress = int(((page_index + 1) / num_pages) * 100)
+                                progress_bar.progress(progress)
+                                status_text.text(
+                                    f"Processing page {page_index + 1} of {num_pages}"
+                                )
 
                     zip_buffer.seek(0)
 
@@ -253,16 +271,16 @@ elif feature == "✂️ Split PDF":
                         max_value=num_pages,
                         value=num_pages
                     )
-                
+
                 if st.button("✂️ Split Range", use_container_width=True):
                     writer = PyPDF2.PdfWriter()
                     for i in range(start_page - 1, end_page):
                         writer.add_page(reader.pages[i])
-                    
+
                     output = io.BytesIO()
                     writer.write(output)
                     output.seek(0)
-                    
+
                     create_download_button(
                         output.getvalue(),
                         f"pages_{start_page}_to_{end_page}.pdf",
@@ -621,6 +639,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
