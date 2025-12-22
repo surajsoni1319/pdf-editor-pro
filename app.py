@@ -15,7 +15,7 @@ st.set_page_config(page_title="PDF Editor Pro", page_icon="📄", layout="wide")
 st.markdown("""
     <style>
     .main-header {
-        font-size: 3rem;
+        font-size: 5rem;
         font-weight: bold;
         text-align: center;
         color: #FF4B4B;
@@ -30,7 +30,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<p class="main-header">📄 PDF Editor Pro</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-header">📄 Star Cement PDF Editor Pro</p>', unsafe_allow_html=True)
 st.markdown("---")
 
 # Sidebar for feature selection
@@ -503,4 +503,5 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
