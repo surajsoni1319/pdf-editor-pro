@@ -159,15 +159,6 @@ if feature == "🔗 Merge PDFs":
     elif uploaded_files and len(uploaded_files) == 1:
         st.warning("⚠️ Please upload at least **2 PDF files** to merge.")
 
-
-
-
-
-
-
-
-
-
 # Feature 2: Split PDF
 elif feature == "✂️ Split PDF":
     st.header("✂️ Split PDF into Pages")
@@ -467,54 +458,105 @@ elif feature == "🔄 Rotate Pages":
 # Feature 5: Add Watermark
 elif feature == "💧 Add Watermark":
     st.header("💧 Add Watermark to PDF")
-    st.write("Add text watermark to all pages.")
-    
-    uploaded_file = st.file_uploader("Choose a PDF file", type=['pdf'])
-    
+    st.write("Add a transparent text watermark and preview before downloading.")
+
+    uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
+
     if uploaded_file:
-        watermark_text = st.text_input("Watermark text:", placeholder="CONFIDENTIAL")
-        
-        col1, col2 = st.columns(2)
+        watermark_text = st.text_input(
+            "Watermark text",
+            placeholder="CONFIDENTIAL"
+        )
+
+        col1, col2, col3 = st.columns(3)
         with col1:
-            font_size = st.slider("Font size", 10, 100, 40)
+            font_size = st.slider("Font size", 20, 120, 48)
         with col2:
-            opacity = st.slider("Opacity", 0.1, 1.0, 0.3, 0.1)
-        
-        if st.button("💧 Add Watermark", use_container_width=True) and watermark_text:
-            try:
-                # Create watermark
-                packet = io.BytesIO()
-                can = canvas.Canvas(packet, pagesize=letter)
-                can.setFillColorRGB(0, 0, 0, opacity)
-                can.setFont("Helvetica-Bold", font_size)
-                can.saveState()
-                can.translate(300, 400)
-                can.rotate(45)
-                can.drawCentredString(0, 0, watermark_text)
-                can.restoreState()
-                can.save()
-                
-                packet.seek(0)
-                watermark_pdf = PyPDF2.PdfReader(packet)
-                watermark_page = watermark_pdf.pages[0]
-                
-                # Apply to original PDF
-                reader = PyPDF2.PdfReader(uploaded_file)
-                writer = PyPDF2.PdfWriter()
-                
-                for page in reader.pages:
-                    page.merge_page(watermark_page)
-                    writer.add_page(page)
-                
-                output = io.BytesIO()
-                writer.write(output)
-                output.seek(0)
-                
-                create_download_button(output.getvalue(), "watermarked_document.pdf", "⬇️ Download Watermarked PDF")
-                st.success("✅ Watermark added successfully!")
-            
-            except Exception as e:
-                st.error(f"❌ Error: {str(e)}")
+            opacity = st.slider("Opacity", 0.05, 0.9, 0.25)
+        with col3:
+            rotation = st.slider("Rotation angle", -90, 90, 45)
+
+        if st.button("💧 Add Watermark", use_container_width=True):
+            if not watermark_text.strip():
+                st.warning("⚠️ Please enter watermark text.")
+            else:
+                try:
+                    reader = PyPDF2.PdfReader(uploaded_file)
+                    writer = PyPDF2.PdfWriter()
+
+                    for page in reader.pages:
+                        page_width = float(page.mediabox.width)
+                        page_height = float(page.mediabox.height)
+
+                        # Create watermark page
+                        packet = io.BytesIO()
+                        can = canvas.Canvas(packet, pagesize=(page_width, page_height))
+
+                        can.saveState()
+                        can.setFont("Helvetica-Bold", font_size)
+                        can.setFillAlpha(opacity)  # TRUE transparency
+                        can.translate(page_width / 2, page_height / 2)
+                        can.rotate(rotation)
+                        can.drawCentredString(0, 0, watermark_text)
+                        can.restoreState()
+                        can.save()
+
+                        packet.seek(0)
+                        watermark_pdf = PyPDF2.PdfReader(packet)
+                        watermark_page = watermark_pdf.pages[0]
+
+                        page.merge_page(watermark_page)
+                        writer.add_page(page)
+
+                    output = io.BytesIO()
+                    writer.write(output)
+                    output.seek(0)
+
+                    # Save for preview & download
+                    st.session_state.watermarked_pdf = output.getvalue()
+
+                    st.success("✅ Watermark added successfully!")
+
+                except Exception as e:
+                    st.error(f"❌ Error while adding watermark: {str(e)}")
+
+    # ======================================================
+    # PREVIEW WATERMARKED PDF BEFORE DOWNLOAD
+    # ======================================================
+    if "watermarked_pdf" in st.session_state:
+
+        st.markdown("### 👀 Preview Watermarked Document")
+
+        preview_pages = st.slider(
+            "Number of pages to preview",
+            min_value=1,
+            max_value=5,
+            value=2
+        )
+
+        try:
+            images = convert_from_bytes(
+                st.session_state.watermarked_pdf,
+                dpi=90,
+                first_page=1,
+                last_page=preview_pages
+            )
+
+            for idx, img in enumerate(images, start=1):
+                st.image(
+                    img,
+                    caption=f"Preview – Page {idx}",
+                    use_column_width=True
+                )
+
+        except Exception:
+            st.warning("⚠️ Preview not available on this system.")
+
+        create_download_button(
+            st.session_state.watermarked_pdf,
+            "watermarked_document.pdf",
+            "⬇️ Download Final Watermarked PDF"
+        )
 
 # Feature 6: Extract Text
 elif feature == "📝 Extract Text":
@@ -710,6 +752,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
