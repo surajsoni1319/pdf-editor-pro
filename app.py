@@ -1088,10 +1088,11 @@ st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #666;'>
     <p>📄 Stat Cement PDF Editor Pro </p>
-    <p>💡 All processing happens in your browser. Files are not stored.</p>
+    <p>💡 All processing happens securely on the server. Files are not stored </p>
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
