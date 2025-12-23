@@ -805,40 +805,83 @@ elif feature == "🖼️ Extract Images":
             st.error(f"❌ Error extracting images: {str(e)}")
 
 
-# Feature 8: Compress PDF
+# Feature 8: Compress PDF (REAL COMPRESSION)
 elif feature == "🗜️ Compress PDF":
     st.header("🗜️ Compress PDF Size")
-    st.write("Reduce PDF file size by removing unnecessary data.")
-    
-    uploaded_file = st.file_uploader("Choose a PDF file", type=['pdf'])
-    
+    st.write("Reduce PDF size by recompressing page images.")
+
+    st.info(
+        "ℹ️ Strong compression converts pages to images. "
+        "Text may not remain selectable."
+    )
+
+    uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
+
     if uploaded_file:
         original_size = len(uploaded_file.getvalue()) / 1024  # KB
         st.info(f"📊 Original size: {original_size:.2f} KB")
-        
+
+        compression_level = st.radio(
+            "Compression level",
+            ["Low (best quality)", "Medium (balanced)", "High (smallest size)"],
+            horizontal=True
+        )
+
+        if compression_level == "Low (best quality)":
+            dpi = 200
+            quality = 85
+        elif compression_level == "Medium (balanced)":
+            dpi = 150
+            quality = 70
+        else:
+            dpi = 100
+            quality = 55
+
         if st.button("🗜️ Compress PDF", use_container_width=True):
             try:
-                reader = PyPDF2.PdfReader(uploaded_file)
-                writer = PyPDF2.PdfWriter()
-                
-                for page in reader.pages:
-                    page.compress_content_streams()
-                    writer.add_page(page)
-                
-                output = io.BytesIO()
-                writer.write(output)
-                output.seek(0)
-                
-                compressed_size = len(output.getvalue()) / 1024  # KB
+                with st.spinner("Compressing PDF..."):
+                    # Render pages as images
+                    images = convert_from_bytes(
+                        uploaded_file.getvalue(),
+                        dpi=dpi
+                    )
+
+                    if not images:
+                        st.error("❌ Failed to render PDF pages.")
+                        st.stop()
+
+                    compressed_pdf = io.BytesIO()
+                    image_bytes = []
+
+                    for img in images:
+                        img_buffer = io.BytesIO()
+                        img.convert("RGB").save(
+                            img_buffer,
+                            format="JPEG",
+                            quality=quality,
+                            optimize=True
+                        )
+                        image_bytes.append(img_buffer.getvalue())
+
+                    # Rebuild PDF from compressed images
+                    compressed_pdf.write(img2pdf.convert(image_bytes))
+                    compressed_pdf.seek(0)
+
+                compressed_size = len(compressed_pdf.getvalue()) / 1024
                 reduction = ((original_size - compressed_size) / original_size) * 100
-                
+
                 st.success(f"✅ Compressed size: {compressed_size:.2f} KB")
                 st.success(f"📉 Reduced by: {reduction:.1f}%")
-                
-                create_download_button(output.getvalue(), "compressed_document.pdf", "⬇️ Download Compressed PDF")
-            
+
+                create_download_button(
+                    compressed_pdf.getvalue(),
+                    "compressed_document.pdf",
+                    "⬇️ Download Compressed PDF"
+                )
+
             except Exception as e:
-                st.error(f"❌ Error: {str(e)}")
+                st.error(f"❌ Error compressing PDF: {str(e)}")
+
 
 # Feature 9: PDF to Images
 elif feature == "📸 PDF to Images":
@@ -1032,6 +1075,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
