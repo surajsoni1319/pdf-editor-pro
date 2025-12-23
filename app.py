@@ -1004,68 +1004,126 @@ elif feature == "📸 PDF to Images":
             except Exception as e:
                 st.error(f"❌ Failed to convert PDF to images: {str(e)}")
 
-# Feature 10: Highlight Text
+# Feature 10: Highlight Text (FIXED + PREVIEW)
 elif feature == "✨ Highlight Text":
     st.header("✨ Highlight Areas in PDF")
-    st.write("Add colored highlights to specific areas.")
-    
-    uploaded_file = st.file_uploader("Choose a PDF file", type=['pdf'])
-    
+    st.write("Add colored highlights to specific areas and preview before downloading.")
+
+    uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
+
     if uploaded_file:
-        st.info("📄 Upload your PDF first")
-        
+        reader = PyPDF2.PdfReader(uploaded_file)
+        total_pages = len(reader.pages)
+
+        st.info(f"📄 Total pages: {total_pages}")
+
         col1, col2 = st.columns(2)
         with col1:
-            page_to_highlight = st.number_input("Page number", min_value=1, value=1)
-            highlight_color = st.selectbox("Highlight color", ["Yellow", "Green", "Red", "Blue"])
-        
+            page_to_highlight = st.number_input(
+                "Page number",
+                min_value=1,
+                max_value=total_pages,
+                value=1
+            )
+            highlight_color = st.selectbox(
+                "Highlight color",
+                ["Yellow", "Green", "Red", "Blue"]
+            )
+
         with col2:
-            x_pos = st.slider("X position", 0, 600, 100)
-            y_pos = st.slider("Y position", 0, 800, 600)
-        
-        width = st.slider("Width", 50, 500, 200)
-        height = st.slider("Height", 10, 200, 50)
-        
-        if st.button("✨ Add Highlight", use_container_width=True):
+            x_pos = st.slider("X position", 0, 1000, 100)
+            y_pos = st.slider("Y position", 0, 1000, 600)
+
+        width = st.slider("Width", 50, 800, 200)
+        height = st.slider("Height", 10, 300, 50)
+        opacity = st.slider("Opacity", 0.1, 0.8, 0.3)
+
+        if st.button("✨ Apply Highlight", use_container_width=True):
             try:
-                # Color mapping
+                # ---------------- COLOR MAP ----------------
                 color_map = {
                     "Yellow": yellow,
                     "Green": green,
                     "Red": red,
                     "Blue": blue
                 }
-                
-                # Create highlight overlay
-                packet = io.BytesIO()
-                can = canvas.Canvas(packet, pagesize=letter)
-                can.setFillColor(color_map[highlight_color], alpha=0.3)
-                can.rect(x_pos, y_pos, width, height, fill=1, stroke=0)
-                can.save()
-                
-                packet.seek(0)
-                overlay_pdf = PyPDF2.PdfReader(packet)
-                overlay_page = overlay_pdf.pages[0]
-                
-                # Apply to original PDF
-                reader = PyPDF2.PdfReader(uploaded_file)
+
                 writer = PyPDF2.PdfWriter()
-                
-                for i, page in enumerate(reader.pages, 1):
+
+                for i, page in enumerate(reader.pages, start=1):
+
                     if i == page_to_highlight:
+                        page_width = float(page.mediabox.width)
+                        page_height = float(page.mediabox.height)
+
+                        # -------- Create overlay using actual page size --------
+                        packet = io.BytesIO()
+                        can = canvas.Canvas(
+                            packet,
+                            pagesize=(page_width, page_height)
+                        )
+
+                        can.setFillColor(color_map[highlight_color], alpha=opacity)
+                        can.rect(
+                            x_pos,
+                            y_pos,
+                            width,
+                            height,
+                            fill=1,
+                            stroke=0
+                        )
+                        can.save()
+
+                        packet.seek(0)
+                        overlay_pdf = PyPDF2.PdfReader(packet)
+                        overlay_page = overlay_pdf.pages[0]
+
                         page.merge_page(overlay_page)
+
                     writer.add_page(page)
-                
+
                 output = io.BytesIO()
                 writer.write(output)
                 output.seek(0)
-                
-                create_download_button(output.getvalue(), "highlighted_document.pdf", "⬇️ Download Highlighted PDF")
-                st.success("✅ Highlight added successfully!")
-                
+
+                # Save for preview + download
+                st.session_state.highlighted_pdf = output.getvalue()
+
+                st.success("✅ Highlight applied successfully!")
+
             except Exception as e:
-                st.error(f"❌ Error: {str(e)}")
-                
+                st.error(f"❌ Error applying highlight: {str(e)}")
+
+    # ======================================================
+    # PREVIEW + DOWNLOAD
+    # ======================================================
+    if "highlighted_pdf" in st.session_state:
+
+        st.markdown("### 👀 Preview Highlighted Page")
+
+        try:
+            preview_image = convert_from_bytes(
+                st.session_state.highlighted_pdf,
+                dpi=120,
+                first_page=page_to_highlight,
+                last_page=page_to_highlight
+            )[0]
+
+            st.image(
+                preview_image,
+                caption=f"Preview – Page {page_to_highlight}",
+                use_column_width=True
+            )
+
+        except Exception:
+            st.warning("⚠️ Preview not available on this system.")
+
+        create_download_button(
+            st.session_state.highlighted_pdf,
+            "highlighted_document.pdf",
+            "⬇️ Download Highlighted PDF"
+        )
+
 # Feature 11 : Reorder PDF Pages
 elif feature == "🔀 Reorder Pages":
     st.header("🔀 Reorder PDF Pages")
@@ -1174,48 +1232,6 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
