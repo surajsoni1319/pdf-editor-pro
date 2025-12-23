@@ -897,28 +897,90 @@ elif feature == "🗜️ Compress PDF":
             except Exception as e:
                 st.error(f"❌ Compression failed: {str(e)}")
 
-
 # Feature 9: PDF to Images
 elif feature == "📸 PDF to Images":
     st.header("📸 Convert PDF to Images")
-    st.write("Convert each page to an image file.")
-    
-    uploaded_file = st.file_uploader("Choose a PDF file", type=['pdf'])
-    
+    st.write("Convert each page of a PDF into image files.")
+
+    uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
+
     if uploaded_file:
         col1, col2 = st.columns(2)
         with col1:
             image_format = st.selectbox("Image format", ["PNG", "JPEG"])
         with col2:
             dpi = st.slider("Quality (DPI)", 72, 300, 150)
-        
+
+        st.info(
+            "ℹ️ This feature requires **Poppler**. "
+            "Works locally or in Docker. "
+            "May not work on Streamlit Cloud without configuration."
+        )
+
         if st.button("📸 Convert to Images", use_container_width=True):
             try:
-                st.info("⚠️ Note: This feature requires 'poppler' to be installed on the server. For local use, install: `pip install pdf2image` and poppler-utils")
-                st.warning("This feature may not work on Streamlit Cloud without additional configuration.")
-                
+                with st.spinner("Converting PDF pages to images..."):
+                    images = convert_from_bytes(
+                        uploaded_file.getvalue(),
+                        dpi=dpi
+                    )
+
+                if not images:
+                    st.error("❌ No pages could be converted.")
+                    st.stop()
+
+                st.success(f"✅ Converted {len(images)} pages successfully!")
+
+                # ---------------- PREVIEW ----------------
+                st.markdown("### 👀 Image Preview")
+                preview_count = min(5, len(images))
+
+                for i in range(preview_count):
+                    st.image(
+                        images[i],
+                        caption=f"Page {i + 1}",
+                        use_column_width=True
+                    )
+
+                # ---------------- PREPARE ZIP ----------------
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                    for i, img in enumerate(images, start=1):
+                        img_bytes = io.BytesIO()
+
+                        if image_format == "PNG":
+                            img.save(img_bytes, format="PNG")
+                            ext = "png"
+                        else:
+                            img.convert("RGB").save(
+                                img_bytes,
+                                format="JPEG",
+                                quality=90
+                            )
+                            ext = "jpg"
+
+                        zip_file.writestr(
+                            f"page_{i}.{ext}",
+                            img_bytes.getvalue()
+                        )
+
+                zip_buffer.seek(0)
+
+                # ---------------- DOWNLOAD ----------------
+                st.download_button(
+                    label="📦 Download All Images (ZIP)",
+                    data=zip_buffer.getvalue(),
+                    file_name="pdf_images.zip",
+                    mime="application/zip",
+                    use_container_width=True
+                )
+
             except Exception as e:
-                st.error(f"❌ Error: {str(e)}")
+                st.error(
+                    "❌ Failed to convert PDF to images.\n\n"
+                    f"Reason: {str(e)}"
+                )
+
 
 # Feature 10: Highlight Text
 elif feature == "✨ Highlight Text":
@@ -1090,6 +1152,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
