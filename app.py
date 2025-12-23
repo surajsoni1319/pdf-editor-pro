@@ -804,7 +804,7 @@ elif feature == "🖼️ Extract Images":
         except Exception as e:
             st.error(f"❌ Error extracting images: {str(e)}")
 
-Feature 8: Compress PDF (FINAL & CORRECT)
+# Feature 8: Compress PDF
 elif feature == "🗜️ Compress PDF":
     st.header("🗜️ Compress PDF Size")
     st.write("Choose compression level based on quality vs file size.")
@@ -1118,6 +1118,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
