@@ -825,10 +825,10 @@ elif feature == "🗜️ Compress PDF":
 
         # Compression presets
         if compression_level == "Low (best quality)":
-            dpi, quality = 200, 85
+            dpi, quality = None, None
         elif compression_level == "Medium (balanced)":
             dpi, quality = 150, 70
-        else:  # High
+        else:  # HIGH – FORCE aggressive compression
             dpi, quality = 72, 45
 
         if compression_level == "High (smallest size)":
@@ -840,52 +840,87 @@ elif feature == "🗜️ Compress PDF":
         if st.button("🗜️ Compress PDF", use_container_width=True):
             try:
                 with st.spinner("Compressing PDF..."):
-                    
-                    # Convert PDF pages to images with specified DPI
-                    images = convert_from_bytes(
-                        original_bytes,
-                        dpi=dpi
-                    )
 
-                    # Compress images to JPEG
-                    img_buffers = []
-                    for img in images:
-                        buf = io.BytesIO()
-                        img.convert("RGB").save(
-                            buf,
-                            format="JPEG",
-                            quality=quality,
-                            optimize=True
+                    # --------------------------------------------------
+                    # LOW MODE → TEXT STREAM COMPRESSION ONLY
+                    # --------------------------------------------------
+                    reader = PyPDF2.PdfReader(io.BytesIO(original_bytes))
+                    writer = PyPDF2.PdfWriter()
+
+                    for page in reader.pages:
+                        page.compress_content_streams()
+                        writer.add_page(page)
+
+                    low_output = io.BytesIO()
+                    writer.write(low_output)
+                    low_bytes = low_output.getvalue()
+                    low_size = len(low_bytes) / 1024
+
+                    # --------------------------------------------------
+                    # IMAGE COMPRESSION (for Medium & High)
+                    # --------------------------------------------------
+                    image_bytes = None
+                    image_size = None
+
+                    if compression_level != "Low (best quality)":
+                        images = convert_from_bytes(
+                            original_bytes,
+                            dpi=dpi
                         )
-                        img_buffers.append(buf.getvalue())
 
-                    # Convert images back to PDF
-                    final_pdf = io.BytesIO()
-                    final_pdf.write(img2pdf.convert(img_buffers))
-                    final_pdf.seek(0)
+                        img_buffers = []
+                        for img in images:
+                            buf = io.BytesIO()
+                            img.convert("RGB").save(
+                                buf,
+                                format="JPEG",
+                                quality=quality,
+                                optimize=True
+                            )
+                            img_buffers.append(buf.getvalue())
 
-                    final_bytes = final_pdf.getvalue()
-                    final_size = len(final_bytes) / 1024
+                        img_pdf = io.BytesIO()
+                        img_pdf.write(img2pdf.convert(img_buffers))
+                        img_pdf.seek(0)
 
-                    reduction = ((original_size - final_size) / original_size) * 100
+                        image_bytes = img_pdf.getvalue()
+                        image_size = len(image_bytes) / 1024
 
-                    st.success(f"✅ Compressed size: {final_size:.2f} KB")
-                    st.success(f"📉 Reduced by: {reduction:.1f}%")
-                    
+                    # --------------------------------------------------
+                    # FINAL DECISION
+                    # --------------------------------------------------
                     if compression_level == "Low (best quality)":
-                        method = "High-quality image compression (200 DPI, 85% quality)"
-                    elif compression_level == "Medium (balanced)":
-                        method = "Balanced image compression (150 DPI, 70% quality)"
-                    else:
-                        method = "Aggressive image compression (72 DPI, 45% quality)"
-                    
-                    st.caption(f"🔍 Method: {method}")
+                        final_bytes = low_bytes
+                        final_size = low_size
+                        method = "Text stream compression"
 
-                    create_download_button(
-                        final_bytes,
-                        "compressed_document.pdf",
-                        "⬇️ Download Compressed PDF"
-                    )
+                    elif compression_level == "Medium (balanced)":
+                        # Choose smaller of text vs image
+                        if image_size and image_size < low_size:
+                            final_bytes = image_bytes
+                            final_size = image_size
+                            method = "Hybrid image compression"
+                        else:
+                            final_bytes = low_bytes
+                            final_size = low_size
+                            method = "Text stream compression"
+
+                    else:  # HIGH – FORCE image compression
+                        final_bytes = image_bytes
+                        final_size = image_size
+                        method = "Forced raster compression (low DPI)"
+
+                reduction = ((original_size - final_size) / original_size) * 100
+
+                st.success(f"✅ Compressed size: {final_size:.2f} KB")
+                st.success(f"📉 Reduced by: {reduction:.1f}%")
+                st.caption(f"🔍 Method used: {method}")
+
+                create_download_button(
+                    final_bytes,
+                    "compressed_document.pdf",
+                    "⬇️ Download Compressed PDF"
+                )
 
             except Exception as e:
                 st.error(f"❌ Compression failed: {str(e)}")
@@ -1082,6 +1117,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
