@@ -661,27 +661,29 @@ elif feature == "📝 Extract Text":
             use_container_width=True
         )
 
-# Feature 7: Extract Images 
+# Feature 7: Extract Images (ROBUST – LOGOS SUPPORTED)
 elif feature == "🖼️ Extract Images":
     st.header("🖼️ Extract Images from PDF")
-    st.write("Extract embedded images from your PDF with preview and download options.")
-    st.info("ℹ️ Only embedded images are extracted. Scanned pages or vector graphics are skipped.")
+    st.write("Extract embedded images (logos, photos) from PDFs.")
 
     uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
 
     if uploaded_file:
         try:
             reader = PyPDF2.PdfReader(uploaded_file)
+
             extracted_images = []
+            detected_images = 0
             zip_buffer = io.BytesIO()
 
             with st.spinner("Scanning PDF for images..."):
                 for page_num, page in enumerate(reader.pages, start=1):
 
-                    if "/XObject" not in page["/Resources"]:
+                    resources = page.get("/Resources")
+                    if not resources or "/XObject" not in resources:
                         continue
 
-                    xObject = page["/Resources"]["/XObject"].get_object()
+                    xObject = resources["/XObject"].get_object()
 
                     for obj_name in xObject:
                         obj = xObject[obj_name]
@@ -689,51 +691,85 @@ elif feature == "🖼️ Extract Images":
                         if obj.get("/Subtype") != "/Image":
                             continue
 
+                        detected_images += 1
+
                         try:
                             data = obj.get_data()
-                            width = obj["/Width"]
-                            height = obj["/Height"]
-                            color_space = obj.get("/ColorSpace")
+                            filters = obj.get("/Filter")
 
-                            # Determine image mode
-                            if color_space == "/DeviceRGB":
-                                mode = "RGB"
-                            elif color_space == "/DeviceCMYK":
-                                mode = "CMYK"
-                            elif color_space == "/DeviceGray":
-                                mode = "L"
+                            # Normalize filters to list
+                            if isinstance(filters, list):
+                                filters = [f for f in filters]
+                            elif filters:
+                                filters = [filters]
                             else:
-                                continue  # Unsupported color space
+                                filters = []
 
-                            # Rebuild image safely
-                            img = Image.frombytes(mode, (width, height), data)
+                            image_name = f"page_{page_num}_{obj_name[1:]}"
 
+                            # -----------------------------
+                            # CASE 1: JPEG / JPEG2000
+                            # -----------------------------
+                            if "/DCTDecode" in filters or "/JPXDecode" in filters:
+                                img = Image.open(io.BytesIO(data)).convert("RGB")
+                                ext = "jpg"
+
+                            # -----------------------------
+                            # CASE 2: Raw bitmap
+                            # -----------------------------
+                            else:
+                                width = obj["/Width"]
+                                height = obj["/Height"]
+
+                                color_space = obj.get("/ColorSpace")
+                                if isinstance(color_space, list) and color_space[0] == "/ICCBased":
+                                    mode = "RGB"
+                                elif color_space == "/DeviceRGB":
+                                    mode = "RGB"
+                                elif color_space == "/DeviceCMYK":
+                                    mode = "CMYK"
+                                elif color_space == "/DeviceGray":
+                                    mode = "L"
+                                else:
+                                    continue
+
+                                img = Image.frombytes(mode, (width, height), data)
+                                ext = "png"
+
+                            # Save image
                             img_buffer = io.BytesIO()
                             img.save(img_buffer, format="PNG")
                             img_buffer.seek(0)
 
-                            image_name = f"page_{page_num}_{obj_name[1:]}.png"
-
                             extracted_images.append({
-                                "name": image_name,
+                                "name": f"{image_name}.png",
                                 "data": img_buffer.getvalue(),
                                 "page": page_num
                             })
 
                         except Exception:
-                            continue  # Skip problematic images safely
+                            continue
 
-            if not extracted_images:
-                st.warning("⚠️ No extractable images found in this PDF.")
+            # -----------------------------
+            # RESULTS
+            # -----------------------------
+            if not detected_images:
+                st.warning("⚠️ No image objects found in this PDF.")
+                st.stop()
+
+            if detected_images > 0 and not extracted_images:
+                st.warning(
+                    f"⚠️ {detected_images} image object(s) detected, "
+                    "but they could not be extracted as standalone images. "
+                    "They may be masked, vector-based, or part of scanned pages."
+                )
                 st.stop()
 
             st.success(f"✅ Extracted {len(extracted_images)} image(s)")
 
-            # ===============================
-            # PREVIEW IMAGES
-            # ===============================
-            st.markdown("### 👀 Image Previews")
-
+            # -----------------------------
+            # PREVIEW & DOWNLOAD
+            # -----------------------------
             cols = st.columns(3)
             for idx, img in enumerate(extracted_images):
                 with cols[idx % 3]:
@@ -744,24 +780,21 @@ elif feature == "🖼️ Extract Images":
                     )
 
                     st.download_button(
-                        label="⬇️ Download Image",
+                        "⬇️ Download",
                         data=img["data"],
                         file_name=img["name"],
                         mime="image/png",
                         use_container_width=True
                     )
 
-            # ===============================
-            # ZIP DOWNLOAD
-            # ===============================
-            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
                 for img in extracted_images:
-                    zip_file.writestr(img["name"], img["data"])
+                    zf.writestr(img["name"], img["data"])
 
             zip_buffer.seek(0)
 
             st.download_button(
-                label="📦 Download All Images as ZIP",
+                "📦 Download All Images as ZIP",
                 data=zip_buffer,
                 file_name="extracted_images.zip",
                 mime="application/zip",
@@ -999,6 +1032,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
