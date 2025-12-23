@@ -897,7 +897,7 @@ elif feature == "🗜️ Compress PDF":
             except Exception as e:
                 st.error(f"❌ Compression failed: {str(e)}")
 
-# Feature 9: PDF to Images
+# Feature 9: PDF to Images 
 elif feature == "📸 PDF to Images":
     st.header("📸 Convert PDF to Images")
     st.write("Convert each page of a PDF into image files.")
@@ -910,12 +910,6 @@ elif feature == "📸 PDF to Images":
             image_format = st.selectbox("Image format", ["PNG", "JPEG"])
         with col2:
             dpi = st.slider("Quality (DPI)", 72, 300, 150)
-
-        st.info(
-            "ℹ️ This feature requires **Poppler**. "
-            "Works locally or in Docker. "
-            "May not work on Streamlit Cloud without configuration."
-        )
 
         if st.button("📸 Convert to Images", use_container_width=True):
             try:
@@ -931,44 +925,76 @@ elif feature == "📸 PDF to Images":
 
                 st.success(f"✅ Converted {len(images)} pages successfully!")
 
-                # ---------------- PREVIEW ----------------
-                st.markdown("### 👀 Image Preview")
-                preview_count = min(5, len(images))
+                # ===============================
+                # PREVIEW AS THUMBNAILS (GRID)
+                # ===============================
+                st.markdown("### 🖼️ Image Preview & Download")
 
-                for i in range(preview_count):
-                    st.image(
-                        images[i],
-                        caption=f"Page {i + 1}",
-                        use_column_width=True
-                    )
-
-                # ---------------- PREPARE ZIP ----------------
+                cols_per_row = 3
                 zip_buffer = io.BytesIO()
+
                 with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-                    for i, img in enumerate(images, start=1):
-                        img_bytes = io.BytesIO()
 
-                        if image_format == "PNG":
-                            img.save(img_bytes, format="PNG")
-                            ext = "png"
-                        else:
-                            img.convert("RGB").save(
-                                img_bytes,
-                                format="JPEG",
-                                quality=90
-                            )
-                            ext = "jpg"
+                    for idx in range(0, len(images), cols_per_row):
+                        cols = st.columns(cols_per_row)
 
-                        zip_file.writestr(
-                            f"page_{i}.{ext}",
-                            img_bytes.getvalue()
-                        )
+                        for col_idx in range(cols_per_row):
+                            page_index = idx + col_idx
+                            if page_index >= len(images):
+                                continue
+
+                            img = images[page_index]
+                            page_no = page_index + 1
+
+                            # --------- Thumbnail (small preview) ---------
+                            thumb = img.copy()
+                            thumb.thumbnail((350, 350))  # SMALL preview size
+
+                            with cols[col_idx]:
+                                st.markdown(f"**Page {page_no}**")
+                                st.image(thumb)
+
+                                # --------- Full-resolution image for download ---------
+                                full_img_buffer = io.BytesIO()
+
+                                if image_format == "PNG":
+                                    img.save(full_img_buffer, format="PNG")
+                                    ext = "png"
+                                    mime = "image/png"
+                                else:
+                                    img.convert("RGB").save(
+                                        full_img_buffer,
+                                        format="JPEG",
+                                        quality=90
+                                    )
+                                    ext = "jpg"
+                                    mime = "image/jpeg"
+
+                                full_img_buffer.seek(0)
+
+                                # Individual download button (FIXED)
+                                st.download_button(
+                                    label="⬇️ Download",
+                                    data=full_img_buffer.getvalue(),
+                                    file_name=f"page_{page_no}.{ext}",
+                                    mime=mime,
+                                    key=f"download_img_{page_no}",
+                                    use_container_width=True
+                                )
+
+                                # Add to ZIP
+                                zip_file.writestr(
+                                    f"page_{page_no}.{ext}",
+                                    full_img_buffer.getvalue()
+                                )
 
                 zip_buffer.seek(0)
 
-                # ---------------- DOWNLOAD ----------------
+                # ===============================
+                # ZIP DOWNLOAD
+                # ===============================
                 st.download_button(
-                    label="📦 Download All Images (ZIP)",
+                    label="📦 Download All Images as ZIP",
                     data=zip_buffer.getvalue(),
                     file_name="pdf_images.zip",
                     mime="application/zip",
@@ -976,11 +1002,7 @@ elif feature == "📸 PDF to Images":
                 )
 
             except Exception as e:
-                st.error(
-                    "❌ Failed to convert PDF to images.\n\n"
-                    f"Reason: {str(e)}"
-                )
-
+                st.error(f"❌ Failed to convert PDF to images: {str(e)}")
 
 # Feature 10: Highlight Text
 elif feature == "✨ Highlight Text":
@@ -1152,6 +1174,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
