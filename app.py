@@ -804,16 +804,17 @@ elif feature == "🖼️ Extract Images":
         except Exception as e:
             st.error(f"❌ Error extracting images: {str(e)}")
 
-# Feature 8: Compress PDF (FINAL LOGIC)
+# Feature 8: Compress PDF (FINAL & CORRECT)
 elif feature == "🗜️ Compress PDF":
     st.header("🗜️ Compress PDF Size")
-    st.write("Compression level determines quality vs file size trade-off.")
+    st.write("Choose compression level based on quality vs file size.")
 
     uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
 
     if uploaded_file:
         original_bytes = uploaded_file.getvalue()
-        original_size = len(original_bytes) / 1024
+        original_size = len(original_bytes) / 1024  # KB
+
         st.info(f"📊 Original size: {original_size:.2f} KB")
 
         compression_level = st.radio(
@@ -822,18 +823,27 @@ elif feature == "🗜️ Compress PDF":
             horizontal=True
         )
 
+        # Compression presets
         if compression_level == "Low (best quality)":
             dpi, quality = None, None
         elif compression_level == "Medium (balanced)":
-            dpi, quality = 160, 75
-        else:
-            dpi, quality = 110, 55
+            dpi, quality = 150, 70
+        else:  # HIGH – FORCE aggressive compression
+            dpi, quality = 72, 45
+
+        if compression_level == "High (smallest size)":
+            st.warning(
+                "⚠️ High compression converts pages to low-resolution images. "
+                "Text may become blurry and non-selectable."
+            )
 
         if st.button("🗜️ Compress PDF", use_container_width=True):
             try:
                 with st.spinner("Compressing PDF..."):
 
-                    # ---------------- LOW: TEXT ONLY ----------------
+                    # --------------------------------------------------
+                    # LOW MODE → TEXT STREAM COMPRESSION ONLY
+                    # --------------------------------------------------
                     reader = PyPDF2.PdfReader(io.BytesIO(original_bytes))
                     writer = PyPDF2.PdfWriter()
 
@@ -846,7 +856,9 @@ elif feature == "🗜️ Compress PDF":
                     low_bytes = low_output.getvalue()
                     low_size = len(low_bytes) / 1024
 
-                    # ---------------- MEDIUM / HIGH: IMAGE ----------------
+                    # --------------------------------------------------
+                    # IMAGE COMPRESSION (for Medium & High)
+                    # --------------------------------------------------
                     image_bytes = None
                     image_size = None
 
@@ -856,7 +868,7 @@ elif feature == "🗜️ Compress PDF":
                             dpi=dpi
                         )
 
-                        img_data = []
+                        img_buffers = []
                         for img in images:
                             buf = io.BytesIO()
                             img.convert("RGB").save(
@@ -865,22 +877,25 @@ elif feature == "🗜️ Compress PDF":
                                 quality=quality,
                                 optimize=True
                             )
-                            img_data.append(buf.getvalue())
+                            img_buffers.append(buf.getvalue())
 
-                        image_pdf = io.BytesIO()
-                        image_pdf.write(img2pdf.convert(img_data))
-                        image_pdf.seek(0)
+                        img_pdf = io.BytesIO()
+                        img_pdf.write(img2pdf.convert(img_buffers))
+                        img_pdf.seek(0)
 
-                        image_bytes = image_pdf.getvalue()
+                        image_bytes = img_pdf.getvalue()
                         image_size = len(image_bytes) / 1024
 
-                    # ---------------- FINAL DECISION ----------------
+                    # --------------------------------------------------
+                    # FINAL DECISION
+                    # --------------------------------------------------
                     if compression_level == "Low (best quality)":
                         final_bytes = low_bytes
                         final_size = low_size
                         method = "Text stream compression"
 
                     elif compression_level == "Medium (balanced)":
+                        # Choose smaller of text vs image
                         if image_size and image_size < low_size:
                             final_bytes = image_bytes
                             final_size = image_size
@@ -890,10 +905,10 @@ elif feature == "🗜️ Compress PDF":
                             final_size = low_size
                             method = "Text stream compression"
 
-                    else:  # HIGH – FORCE IMAGE
+                    else:  # HIGH – FORCE image compression
                         final_bytes = image_bytes
                         final_size = image_size
-                        method = "Aggressive image flattening"
+                        method = "Forced raster compression (low DPI)"
 
                 reduction = ((original_size - final_size) / original_size) * 100
 
@@ -909,7 +924,6 @@ elif feature == "🗜️ Compress PDF":
 
             except Exception as e:
                 st.error(f"❌ Compression failed: {str(e)}")
-
 
 # Feature 9: PDF to Images
 elif feature == "📸 PDF to Images":
@@ -1103,6 +1117,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
