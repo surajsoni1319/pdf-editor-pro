@@ -661,37 +661,108 @@ elif feature == "📝 Extract Text":
             use_container_width=True
         )
 
-# Feature 7: Extract Images
+# Feature 7: Extract Images (UPGRADED)
 elif feature == "🖼️ Extract Images":
     st.header("🖼️ Extract Images from PDF")
-    st.write("Extract all images from your PDF.")
-    
-    uploaded_file = st.file_uploader("Choose a PDF file", type=['pdf'])
-    
+    st.write("Extract embedded images from your PDF with preview and download options.")
+
+    uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
+
     if uploaded_file:
-        if st.button("🖼️ Extract Images", use_container_width=True):
-            try:
-                reader = PyPDF2.PdfReader(uploaded_file)
-                image_count = 0
-                
-                with st.spinner("Extracting images..."):
-                    for page_num, page in enumerate(reader.pages, 1):
-                        if '/XObject' in page['/Resources']:
-                            xObject = page['/Resources']['/XObject'].get_object()
-                            
-                            for obj in xObject:
-                                if xObject[obj]['/Subtype'] == '/Image':
-                                    image_count += 1
-                                    st.write(f"Found image on page {page_num}")
-                
-                if image_count > 0:
-                    st.success(f"✅ Found {image_count} images!")
-                    st.info("💡 For full image extraction, consider using specialized tools like 'pdfplumber' or 'pdf2image'")
-                else:
-                    st.warning("⚠️ No images found in this PDF.")
-            
-            except Exception as e:
-                st.error(f"❌ Error: {str(e)}")
+        try:
+            reader = PyPDF2.PdfReader(uploaded_file)
+
+            extracted_images = []
+            zip_buffer = io.BytesIO()
+
+            with st.spinner("Scanning PDF for images..."):
+                for page_num, page in enumerate(reader.pages, start=1):
+
+                    if "/XObject" not in page["/Resources"]:
+                        continue
+
+                    xObject = page["/Resources"]["/XObject"].get_object()
+
+                    for obj_name in xObject:
+                        obj = xObject[obj_name]
+
+                        if obj["/Subtype"] == "/Image":
+                            try:
+                                data = obj.get_data()
+                                width = obj["/Width"]
+                                height = obj["/Height"]
+                                color_space = obj.get("/ColorSpace", "Unknown")
+
+                                # Determine image format
+                                if obj["/Filter"] == "/DCTDecode":
+                                    img_format = "JPEG"
+                                    ext = "jpg"
+                                elif obj["/Filter"] == "/FlateDecode":
+                                    img_format = "PNG"
+                                    ext = "png"
+                                else:
+                                    continue  # skip unsupported formats
+
+                                image_name = f"page_{page_num}_{obj_name[1:]}.{ext}"
+
+                                extracted_images.append({
+                                    "name": image_name,
+                                    "data": data,
+                                    "page": page_num,
+                                    "format": img_format
+                                })
+
+                            except Exception:
+                                continue
+
+            if not extracted_images:
+                st.warning("⚠️ No extractable images found in this PDF.")
+                st.stop()
+
+            st.success(f"✅ Extracted {len(extracted_images)} image(s)")
+
+            # ===============================
+            # PREVIEW IMAGES
+            # ===============================
+            st.markdown("### 👀 Image Previews")
+
+            cols = st.columns(3)
+            for idx, img in enumerate(extracted_images):
+                with cols[idx % 3]:
+                    st.image(
+                        img["data"],
+                        caption=f"{img['name']} (Page {img['page']})",
+                        use_column_width=True
+                    )
+
+                    st.download_button(
+                        label="⬇️ Download Image",
+                        data=img["data"],
+                        file_name=img["name"],
+                        mime=f"image/{img['format'].lower()}",
+                        use_container_width=True
+                    )
+
+            # ===============================
+            # ZIP DOWNLOAD
+            # ===============================
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                for img in extracted_images:
+                    zip_file.writestr(img["name"], img["data"])
+
+            zip_buffer.seek(0)
+
+            st.download_button(
+                label="📦 Download All Images as ZIP",
+                data=zip_buffer,
+                file_name="extracted_images.zip",
+                mime="application/zip",
+                use_container_width=True
+            )
+
+        except Exception as e:
+            st.error(f"❌ Error extracting images: {str(e)}")
+
 
 # Feature 8: Compress PDF
 elif feature == "🗜️ Compress PDF":
@@ -920,6 +991,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
