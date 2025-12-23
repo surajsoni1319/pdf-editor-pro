@@ -661,17 +661,17 @@ elif feature == "📝 Extract Text":
             use_container_width=True
         )
 
-# Feature 7: Extract Images (UPGRADED)
+# Feature 7: Extract Images 
 elif feature == "🖼️ Extract Images":
     st.header("🖼️ Extract Images from PDF")
     st.write("Extract embedded images from your PDF with preview and download options.")
+    st.info("ℹ️ Only embedded images are extracted. Scanned pages or vector graphics are skipped.")
 
     uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
 
     if uploaded_file:
         try:
             reader = PyPDF2.PdfReader(uploaded_file)
-
             extracted_images = []
             zip_buffer = io.BytesIO()
 
@@ -686,34 +686,42 @@ elif feature == "🖼️ Extract Images":
                     for obj_name in xObject:
                         obj = xObject[obj_name]
 
-                        if obj["/Subtype"] == "/Image":
-                            try:
-                                data = obj.get_data()
-                                width = obj["/Width"]
-                                height = obj["/Height"]
-                                color_space = obj.get("/ColorSpace", "Unknown")
+                        if obj.get("/Subtype") != "/Image":
+                            continue
 
-                                # Determine image format
-                                if obj["/Filter"] == "/DCTDecode":
-                                    img_format = "JPEG"
-                                    ext = "jpg"
-                                elif obj["/Filter"] == "/FlateDecode":
-                                    img_format = "PNG"
-                                    ext = "png"
-                                else:
-                                    continue  # skip unsupported formats
+                        try:
+                            data = obj.get_data()
+                            width = obj["/Width"]
+                            height = obj["/Height"]
+                            color_space = obj.get("/ColorSpace")
 
-                                image_name = f"page_{page_num}_{obj_name[1:]}.{ext}"
+                            # Determine image mode
+                            if color_space == "/DeviceRGB":
+                                mode = "RGB"
+                            elif color_space == "/DeviceCMYK":
+                                mode = "CMYK"
+                            elif color_space == "/DeviceGray":
+                                mode = "L"
+                            else:
+                                continue  # Unsupported color space
 
-                                extracted_images.append({
-                                    "name": image_name,
-                                    "data": data,
-                                    "page": page_num,
-                                    "format": img_format
-                                })
+                            # Rebuild image safely
+                            img = Image.frombytes(mode, (width, height), data)
 
-                            except Exception:
-                                continue
+                            img_buffer = io.BytesIO()
+                            img.save(img_buffer, format="PNG")
+                            img_buffer.seek(0)
+
+                            image_name = f"page_{page_num}_{obj_name[1:]}.png"
+
+                            extracted_images.append({
+                                "name": image_name,
+                                "data": img_buffer.getvalue(),
+                                "page": page_num
+                            })
+
+                        except Exception:
+                            continue  # Skip problematic images safely
 
             if not extracted_images:
                 st.warning("⚠️ No extractable images found in this PDF.")
@@ -739,7 +747,7 @@ elif feature == "🖼️ Extract Images":
                         label="⬇️ Download Image",
                         data=img["data"],
                         file_name=img["name"],
-                        mime=f"image/{img['format'].lower()}",
+                        mime="image/png",
                         use_container_width=True
                     )
 
@@ -991,6 +999,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
