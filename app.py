@@ -1440,6 +1440,9 @@ elif feature == "✨ Highlight Text":
     uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
 
     if uploaded_file:
+        import base64
+        import streamlit.components.v1 as components
+
         pdf_bytes = uploaded_file.read()
         pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
@@ -1467,19 +1470,22 @@ button, select { padding:6px 8px; cursor:pointer; }
 </head>
 
 <body>
+
 <div id="toolbar">
   <button onclick="setTool('highlight')">Highlight</button>
+
   <select id="penColor">
     <option value="red">Red</option>
     <option value="blue">Blue</option>
     <option value="green">Green</option>
   </select>
+
   <button onclick="setTool('pen')">Pen</button>
   <button onclick="setTool('eraser')">Eraser</button>
   <button onclick="undo()">Undo</button>
   <button onclick="prevPage()">Prev</button>
   <button onclick="nextPage()">Next</button>
-  <button onclick="exportPDF()">Download</button>
+  <button onclick="downloadPDF()">Download</button>
 </div>
 
 <div id="container">
@@ -1554,19 +1560,31 @@ function renderPage(n){
 function prevPage(){ if(currentPage>1){ currentPage--; renderPage(currentPage);} }
 function nextPage(){ if(currentPage<pdfDoc.numPages){ currentPage++; renderPage(currentPage);} }
 
-async function exportPDF(){
+async function downloadPDF(){
   const pdf = await PDFLib.PDFDocument.load(pdfData);
+
   for(let i=1;i<=pdf.getPageCount();i++){
     if(!history[i]) continue;
+
     renderPage(i);
     const png = drawCanvas.toDataURL("image/png");
     const img = await pdf.embedPng(png);
     const page = pdf.getPages()[i-1];
-    page.drawImage(img,{x:0,y:0,width:page.getWidth(),height:page.getHeight()});
+
+    page.drawImage(img,{
+      x:0,
+      y:0,
+      width:page.getWidth(),
+      height:page.getHeight()
+    });
   }
+
   const bytes = await pdf.save();
-  const b64 = btoa(String.fromCharCode(...bytes));
-  window.parent.postMessage({ type:"pdf_download", data:b64 }, "*");
+  const blob = new Blob([bytes], {type:"application/pdf"});
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "highlighted_document.pdf";
+  link.click();
 }
 
 pdfjsLib.getDocument({ data: pdfData }).promise.then(doc=>{
@@ -1574,27 +1592,19 @@ pdfjsLib.getDocument({ data: pdfData }).promise.then(doc=>{
   renderPage(1);
 });
 </script>
+
 </body>
 </html>
 """
 
         html_code = html_code.replace("__PDF_BASE64__", pdf_base64)
 
-        result = components.html(
+        components.html(
             html_code,
             height=900,
-            scrolling=True,
-            key="pdf_highlighter"
+            scrolling=True
         )
 
-        if result:
-            st.download_button(
-                "Download Highlighted PDF",
-                data=base64.b64decode(result),
-                file_name="highlighted_document.pdf",
-                mime="application/pdf",
-                use_container_width=True
-            )
 
 
 # Feature 11 : Reorder PDF Pages
@@ -1705,6 +1715,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
