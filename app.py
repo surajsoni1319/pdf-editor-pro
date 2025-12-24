@@ -1739,7 +1739,15 @@ async function downloadPDF(){
     const tempCanvas = document.createElement('canvas');
     const tempCtx = tempCanvas.getContext('2d');
     
-    const pdf = await PDFLib.PDFDocument.load(pdfData);
+    // Convert base64 to ArrayBuffer for pdf-lib
+    const binaryString = atob("__PDF_BASE64__");
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    const pdf = await PDFLib.PDFDocument.load(bytes);
 
     for(let i=1; i<=pdf.getPageCount(); i++){
       // Render page (even if no annotations) to get proper dimensions
@@ -1940,6 +1948,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
