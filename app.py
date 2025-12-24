@@ -11,6 +11,10 @@ import pdf2image
 from pdf2image import convert_from_bytes
 import img2pdf
 import os
+# added new 
+import base64
+import streamlit.components.v1 as components
+
 
 st.set_page_config(page_title="Star Cement PDF Editor Pro", page_icon="📄", layout="wide")
 
@@ -1004,125 +1008,170 @@ elif feature == "📸 PDF to Images":
             except Exception as e:
                 st.error(f"❌ Failed to convert PDF to images: {str(e)}")
 
-# Feature 10: Highlight Text (FIXED + PREVIEW)
+# Feature 10: Highlight Text (Visual PDF Highlighter)
 elif feature == "✨ Highlight Text":
-    st.header("✨ Highlight Areas in PDF")
-    st.write("Add colored highlights to specific areas and preview before downloading.")
+    st.header("✨ Highlight Text (Visual Editor)")
+    st.write("Highlight text visually using pen & highlighter tools.")
 
-    uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
+    uploaded_file = st.file_uploader(
+        "Upload a PDF to highlight",
+        type=["pdf"]
+    )
 
     if uploaded_file:
-        reader = PyPDF2.PdfReader(uploaded_file)
-        total_pages = len(reader.pages)
+        pdf_bytes = uploaded_file.read()
+        pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
-        st.info(f"📄 Total pages: {total_pages}")
+        components.html(
+            f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="UTF-8" />
+              <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+              <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
 
-        col1, col2 = st.columns(2)
-        with col1:
-            page_to_highlight = st.number_input(
-                "Page number",
-                min_value=1,
-                max_value=total_pages,
-                value=1
-            )
-            highlight_color = st.selectbox(
-                "Highlight color",
-                ["Yellow", "Green", "Red", "Blue"]
-            )
+              <style>
+                body {{
+                  margin: 0;
+                  font-family: Arial, sans-serif;
+                }}
 
-        with col2:
-            x_pos = st.slider("X position", 0, 1000, 100)
-            y_pos = st.slider("Y position", 0, 1000, 600)
+                #toolbar {{
+                  padding: 10px;
+                  background: #f4f4f4;
+                  display: flex;
+                  gap: 10px;
+                  border-bottom: 1px solid #ccc;
+                }}
 
-        width = st.slider("Width", 50, 800, 200)
-        height = st.slider("Height", 10, 300, 50)
-        opacity = st.slider("Opacity", 0.1, 0.8, 0.3)
+                canvas {{
+                  position: absolute;
+                  left: 0;
+                  top: 0;
+                }}
 
-        if st.button("✨ Apply Highlight", use_container_width=True):
-            try:
-                # ---------------- COLOR MAP ----------------
-                color_map = {
-                    "Yellow": yellow,
-                    "Green": green,
-                    "Red": red,
-                    "Blue": blue
-                }
+                #container {{
+                  position: relative;
+                }}
 
-                writer = PyPDF2.PdfWriter()
+                button {{
+                  padding: 6px 10px;
+                  cursor: pointer;
+                }}
+              </style>
+            </head>
 
-                for i, page in enumerate(reader.pages, start=1):
+            <body>
+              <div id="toolbar">
+                <button onclick="setTool('highlight')">🖍 Highlight</button>
+                <button onclick="setTool('pen')">✏️ Pen</button>
+                <button onclick="setTool('eraser')">🧽 Eraser</button>
+                <button onclick="undo()">↩ Undo</button>
+                <button onclick="exportPDF()">⬇ Download</button>
+              </div>
 
-                    if i == page_to_highlight:
-                        page_width = float(page.mediabox.width)
-                        page_height = float(page.mediabox.height)
+              <div id="container">
+                <canvas id="pdfCanvas"></canvas>
+                <canvas id="drawCanvas"></canvas>
+              </div>
 
-                        # -------- Create overlay using actual page size --------
-                        packet = io.BytesIO()
-                        can = canvas.Canvas(
-                            packet,
-                            pagesize=(page_width, page_height)
-                        )
+              <script>
+                const pdfData = atob("{pdf_base64}");
+                let tool = "highlight";
+                let drawing = false;
+                let history = [];
 
-                        can.setFillColor(color_map[highlight_color], alpha=opacity)
-                        can.rect(
-                            x_pos,
-                            y_pos,
-                            width,
-                            height,
-                            fill=1,
-                            stroke=0
-                        )
-                        can.save()
+                const pdfCanvas = document.getElementById("pdfCanvas");
+                const drawCanvas = document.getElementById("drawCanvas");
+                const pdfCtx = pdfCanvas.getContext("2d");
+                const drawCtx = drawCanvas.getContext("2d");
 
-                        packet.seek(0)
-                        overlay_pdf = PyPDF2.PdfReader(packet)
-                        overlay_page = overlay_pdf.pages[0]
+                function setTool(t) {{
+                  tool = t;
+                }}
 
-                        page.merge_page(overlay_page)
+                function undo() {{
+                  if (history.length === 0) return;
+                  history.pop();
+                  redraw();
+                }}
 
-                    writer.add_page(page)
+                function redraw() {{
+                  drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+                  history.forEach(path => {{
+                    drawCtx.strokeStyle = path.color;
+                    drawCtx.lineWidth = path.width;
+                    drawCtx.globalAlpha = path.alpha;
+                    drawCtx.beginPath();
+                    path.points.forEach((p, i) => {{
+                      if (i === 0) drawCtx.moveTo(p.x, p.y);
+                      else drawCtx.lineTo(p.x, p.y);
+                    }});
+                    drawCtx.stroke();
+                  }});
+                  drawCtx.globalAlpha = 1;
+                }}
 
-                output = io.BytesIO()
-                writer.write(output)
-                output.seek(0)
+                drawCanvas.addEventListener("mousedown", e => {{
+                  drawing = true;
+                  const color = tool === "highlight" ? "yellow" : "red";
+                  const alpha = tool === "highlight" ? 0.3 : 1.0;
+                  const width = tool === "highlight" ? 15 : 2;
 
-                # Save for preview + download
-                st.session_state.highlighted_pdf = output.getvalue()
+                  history.push({{
+                    color, alpha, width,
+                    points: [{{ x: e.offsetX, y: e.offsetY }}]
+                  }});
+                }});
 
-                st.success("✅ Highlight applied successfully!")
+                drawCanvas.addEventListener("mousemove", e => {{
+                  if (!drawing) return;
+                  const path = history[history.length - 1];
+                  path.points.push({{ x: e.offsetX, y: e.offsetY }});
+                  redraw();
+                }});
 
-            except Exception as e:
-                st.error(f"❌ Error applying highlight: {str(e)}")
+                drawCanvas.addEventListener("mouseup", () => drawing = false);
 
-    # ======================================================
-    # PREVIEW + DOWNLOAD
-    # ======================================================
-    if "highlighted_pdf" in st.session_state:
+                async function exportPDF() {{
+                  const pdfDoc = await PDFLib.PDFDocument.load(pdfData);
+                  const page = pdfDoc.getPages()[0];
 
-        st.markdown("### 👀 Preview Highlighted Page")
+                  const pngBytes = drawCanvas.toDataURL("image/png");
+                  const img = await pdfDoc.embedPng(pngBytes);
 
-        try:
-            preview_image = convert_from_bytes(
-                st.session_state.highlighted_pdf,
-                dpi=120,
-                first_page=page_to_highlight,
-                last_page=page_to_highlight
-            )[0]
+                  page.drawImage(img, {{
+                    x: 0,
+                    y: 0,
+                    width: page.getWidth(),
+                    height: page.getHeight()
+                  }});
 
-            st.image(
-                preview_image,
-                caption=f"Preview – Page {page_to_highlight}",
-                use_column_width=True
-            )
+                  const bytes = await pdfDoc.save();
+                  const blob = new Blob([bytes], {{ type: "application/pdf" }});
+                  const link = document.createElement("a");
+                  link.href = URL.createObjectURL(blob);
+                  link.download = "highlighted.pdf";
+                  link.click();
+                }}
 
-        except Exception:
-            st.warning("⚠️ Preview not available on this system.")
-
-        create_download_button(
-            st.session_state.highlighted_pdf,
-            "highlighted_document.pdf",
-            "⬇️ Download Highlighted PDF"
+                pdfjsLib.getDocument({{ data: pdfData }}).promise.then(pdf => {{
+                  pdf.getPage(1).then(page => {{
+                    const viewport = page.getViewport({{ scale: 1.5 }});
+                    pdfCanvas.width = drawCanvas.width = viewport.width;
+                    pdfCanvas.height = drawCanvas.height = viewport.height;
+                    page.render({{ canvasContext: pdfCtx, viewport }});
+                  }});
+                }});
+              </script>
+            </body>
+            </html>
+            """,
+            height=900,
+            scrolling=True,
         )
+
 
 # Feature 11 : Reorder PDF Pages
 elif feature == "🔀 Reorder Pages":
@@ -1232,6 +1281,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
