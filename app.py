@@ -1707,7 +1707,7 @@ drawCanvas.addEventListener("mousedown", e=>{
   if (!history[currentPage]) history[currentPage] = [];
   const color = tool==="pen" ? document.getElementById("penColor").value : "yellow";
   const alpha = tool==="highlight" ? 0.3 : 1;
-  const width = tool==="highlight" ? 14 : 2;
+  const width = tool==="highlight" ? 14 : (tool==="eraser" ? 20 : 2);
   const mode = tool==="eraser" ? "destination-out" : "source-over";
   history[currentPage].push({ color, alpha, width, mode, points:[{x:e.offsetX,y:e.offsetY}] });
 });
@@ -1839,7 +1839,6 @@ pdfjsLib.getDocument({ data: pdfData }).promise.then(doc=>{
             scrolling=True
         )
 
-
 # Feature 11 : Reorder PDF Pages
 elif feature == "🔀 Reorder Pages":
     st.header("🔀 Reorder PDF Pages")
@@ -1948,6 +1947,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
