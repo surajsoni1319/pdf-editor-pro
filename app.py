@@ -1667,7 +1667,7 @@ button, select { padding:6px 8px; cursor:pointer; }
 </div>
 
 <script>
-const pdfData = atob("__PDF_BASE64__");
+const pdfData = Uint8Array.from(atob("__PDF_BASE64__"), c => c.charCodeAt(0));
 let pdfDoc = null;
 let currentPage = 1;
 let tool = "highlight";
@@ -1940,6 +1940,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
