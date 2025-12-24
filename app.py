@@ -1011,163 +1011,170 @@ elif feature == "📸 PDF to Images":
 # Feature 10: Highlight Text (Visual PDF Highlighter)
 elif feature == "✨ Highlight Text":
     st.header("✨ Highlight Text (Visual Editor)")
-    st.write("Highlight text visually using pen & highlighter tools.")
+    st.write("Highlight, draw, erase and download annotated PDFs.")
 
-    uploaded_file = st.file_uploader(
-        "Upload a PDF to highlight",
-        type=["pdf"]
-    )
+    uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
 
     if uploaded_file:
-        pdf_bytes = uploaded_file.read()
-        pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
+        import base64
+        import streamlit.components.v1 as components
+
+        pdf_base64 = base64.b64encode(uploaded_file.read()).decode()
 
         components.html(
             f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <meta charset="UTF-8" />
-              <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-              <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
 
-              <style>
-                body {{
-                  margin: 0;
-                  font-family: Arial, sans-serif;
-                }}
+<style>
+body {{ margin: 0; font-family: Arial; }}
+#toolbar {{
+  display: flex; gap: 8px; padding: 8px;
+  background: #f3f3f3; border-bottom: 1px solid #ccc;
+}}
+#container {{ position: relative; }}
+canvas {{ position: absolute; top: 0; left: 0; }}
+button {{ padding: 6px 10px; cursor: pointer; }}
+</style>
+</head>
 
-                #toolbar {{
-                  padding: 10px;
-                  background: #f4f4f4;
-                  display: flex;
-                  gap: 10px;
-                  border-bottom: 1px solid #ccc;
-                }}
+<body>
 
-                canvas {{
-                  position: absolute;
-                  left: 0;
-                  top: 0;
-                }}
+<div id="toolbar">
+  <button onclick="setTool('highlight')">🖍 Highlight</button>
+  <button onclick="setTool('pen')">✏️ Pen</button>
+  <button onclick="setTool('eraser')">🧽 Eraser</button>
+  <button onclick="undo()">↩ Undo</button>
+  <button onclick="prevPage()">⬅ Prev</button>
+  <button onclick="nextPage()">Next ➡</button>
+  <button onclick="exportPDF()">⬇ Download</button>
+</div>
 
-                #container {{
-                  position: relative;
-                }}
+<div id="container">
+  <canvas id="pdfCanvas"></canvas>
+  <canvas id="drawCanvas"></canvas>
+</div>
 
-                button {{
-                  padding: 6px 10px;
-                  cursor: pointer;
-                }}
-              </style>
-            </head>
+<script>
+const pdfData = atob("{pdf_base64}");
+let pdfDoc = null;
+let currentPage = 1;
+let tool = "highlight";
+let drawing = false;
 
-            <body>
-              <div id="toolbar">
-                <button onclick="setTool('highlight')">🖍 Highlight</button>
-                <button onclick="setTool('pen')">✏️ Pen</button>
-                <button onclick="setTool('eraser')">🧽 Eraser</button>
-                <button onclick="undo()">↩ Undo</button>
-                <button onclick="exportPDF()">⬇ Download</button>
-              </div>
+// per-page drawings
+let pageHistory = {{}};
 
-              <div id="container">
-                <canvas id="pdfCanvas"></canvas>
-                <canvas id="drawCanvas"></canvas>
-              </div>
+const pdfCanvas = document.getElementById("pdfCanvas");
+const drawCanvas = document.getElementById("drawCanvas");
+const pdfCtx = pdfCanvas.getContext("2d");
+const drawCtx = drawCanvas.getContext("2d");
 
-              <script>
-                const pdfData = atob("{pdf_base64}");
-                let tool = "highlight";
-                let drawing = false;
-                let history = [];
+function setTool(t) {{
+  tool = t;
+}}
 
-                const pdfCanvas = document.getElementById("pdfCanvas");
-                const drawCanvas = document.getElementById("drawCanvas");
-                const pdfCtx = pdfCanvas.getContext("2d");
-                const drawCtx = drawCanvas.getContext("2d");
+function undo() {{
+  if (!pageHistory[currentPage] || pageHistory[currentPage].length === 0) return;
+  pageHistory[currentPage].pop();
+  redraw();
+}}
 
-                function setTool(t) {{
-                  tool = t;
-                }}
+function redraw() {{
+  drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+  (pageHistory[currentPage] || []).forEach(p => {{
+    drawCtx.globalCompositeOperation = p.erase ? "destination-out" : "source-over";
+    drawCtx.strokeStyle = p.color;
+    drawCtx.lineWidth = p.width;
+    drawCtx.globalAlpha = p.alpha;
+    drawCtx.beginPath();
+    p.points.forEach((pt, i) => {{
+      i === 0 ? drawCtx.moveTo(pt.x, pt.y) : drawCtx.lineTo(pt.x, pt.y);
+    }});
+    drawCtx.stroke();
+  }});
+  drawCtx.globalAlpha = 1;
+  drawCtx.globalCompositeOperation = "source-over";
+}}
 
-                function undo() {{
-                  if (history.length === 0) return;
-                  history.pop();
-                  redraw();
-                }}
+drawCanvas.onmousedown = e => {{
+  drawing = true;
+  if (!pageHistory[currentPage]) pageHistory[currentPage] = [];
 
-                function redraw() {{
-                  drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
-                  history.forEach(path => {{
-                    drawCtx.strokeStyle = path.color;
-                    drawCtx.lineWidth = path.width;
-                    drawCtx.globalAlpha = path.alpha;
-                    drawCtx.beginPath();
-                    path.points.forEach((p, i) => {{
-                      if (i === 0) drawCtx.moveTo(p.x, p.y);
-                      else drawCtx.lineTo(p.x, p.y);
-                    }});
-                    drawCtx.stroke();
-                  }});
-                  drawCtx.globalAlpha = 1;
-                }}
+  const isEraser = tool === "eraser";
+  pageHistory[currentPage].push({{
+    color: tool === "highlight" ? "yellow" : "red",
+    width: isEraser ? 30 : tool === "highlight" ? 15 : 2,
+    alpha: tool === "highlight" ? 0.3 : 1,
+    erase: isEraser,
+    points: [{{ x: e.offsetX, y: e.offsetY }}]
+  }});
+}};
 
-                drawCanvas.addEventListener("mousedown", e => {{
-                  drawing = true;
-                  const color = tool === "highlight" ? "yellow" : "red";
-                  const alpha = tool === "highlight" ? 0.3 : 1.0;
-                  const width = tool === "highlight" ? 15 : 2;
+drawCanvas.onmousemove = e => {{
+  if (!drawing) return;
+  pageHistory[currentPage].slice(-1)[0].points.push({{
+    x: e.offsetX, y: e.offsetY
+  }});
+  redraw();
+}};
 
-                  history.push({{
-                    color, alpha, width,
-                    points: [{{ x: e.offsetX, y: e.offsetY }}]
-                  }});
-                }});
+drawCanvas.onmouseup = () => drawing = false;
 
-                drawCanvas.addEventListener("mousemove", e => {{
-                  if (!drawing) return;
-                  const path = history[history.length - 1];
-                  path.points.push({{ x: e.offsetX, y: e.offsetY }});
-                  redraw();
-                }});
+async function renderPage(num) {{
+  currentPage = num;
+  const page = await pdfDoc.getPage(num);
+  const viewport = page.getViewport({{ scale: 1.4 }});
 
-                drawCanvas.addEventListener("mouseup", () => drawing = false);
+  pdfCanvas.width = drawCanvas.width = viewport.width;
+  pdfCanvas.height = drawCanvas.height = viewport.height;
 
-                async function exportPDF() {{
-                  const pdfDoc = await PDFLib.PDFDocument.load(pdfData);
-                  const page = pdfDoc.getPages()[0];
+  await page.render({{ canvasContext: pdfCtx, viewport }}).promise;
+  redraw();
+}}
 
-                  const pngBytes = drawCanvas.toDataURL("image/png");
-                  const img = await pdfDoc.embedPng(pngBytes);
+function prevPage() {{
+  if (currentPage > 1) renderPage(currentPage - 1);
+}}
 
-                  page.drawImage(img, {{
-                    x: 0,
-                    y: 0,
-                    width: page.getWidth(),
-                    height: page.getHeight()
-                  }});
+function nextPage() {{
+  if (currentPage < pdfDoc.numPages) renderPage(currentPage + 1);
+}}
 
-                  const bytes = await pdfDoc.save();
-                  const blob = new Blob([bytes], {{ type: "application/pdf" }});
-                  const link = document.createElement("a");
-                  link.href = URL.createObjectURL(blob);
-                  link.download = "highlighted.pdf";
-                  link.click();
-                }}
+async function exportPDF() {{
+  const pdf = await PDFLib.PDFDocument.load(pdfData);
+  for (let i = 1; i <= pdf.getPageCount(); i++) {{
+    if (!pageHistory[i]) continue;
+    const page = pdf.getPages()[i - 1];
+    renderPage(i);
+    const png = drawCanvas.toDataURL("image/png");
+    const img = await pdf.embedPng(png);
+    page.drawImage(img, {{
+      x: 0, y: 0,
+      width: page.getWidth(),
+      height: page.getHeight()
+    }});
+  }}
+  const bytes = await pdf.save();
+  const blob = new Blob([bytes], {{ type: "application/pdf" }});
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "highlighted.pdf";
+  link.click();
+}}
 
-                pdfjsLib.getDocument({{ data: pdfData }}).promise.then(pdf => {{
-                  pdf.getPage(1).then(page => {{
-                    const viewport = page.getViewport({{ scale: 1.5 }});
-                    pdfCanvas.width = drawCanvas.width = viewport.width;
-                    pdfCanvas.height = drawCanvas.height = viewport.height;
-                    page.render({{ canvasContext: pdfCtx, viewport }});
-                  }});
-                }});
-              </script>
-            </body>
-            </html>
-            """,
+pdfjsLib.getDocument({{ data: pdfData }}).promise.then(pdf => {{
+  pdfDoc = pdf;
+  renderPage(1);
+}});
+</script>
+</body>
+</html>
+""",
             height=900,
             scrolling=True,
         )
@@ -1281,6 +1288,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
