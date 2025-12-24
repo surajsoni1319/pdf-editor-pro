@@ -1193,6 +1193,9 @@ elif feature == "✨ Highlight Text":
     )
 
     if uploaded_file:
+        import base64
+        import streamlit.components.v1 as components
+
         pdf_bytes = uploaded_file.read()
         pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
@@ -1205,18 +1208,37 @@ elif feature == "✨ Highlight Text":
           <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
 
           <style>
-            body {{ margin:0; font-family: Arial; }}
+            body {{
+              margin: 0;
+              font-family: Arial, sans-serif;
+            }}
+
             #toolbar {{
               padding: 8px;
               background: #f4f4f4;
               display: flex;
               gap: 8px;
-              border-bottom: 1px solid #ccc;
               align-items: center;
+              border-bottom: 1px solid #ccc;
+              position: sticky;
+              top: 0;
+              z-index: 10;
             }}
-            #container {{ position: relative; }}
-            canvas {{ position: absolute; top: 0; left: 0; }}
-            button, select {{ padding: 6px 8px; }}
+
+            #container {{
+              position: relative;
+            }}
+
+            canvas {{
+              position: absolute;
+              top: 0;
+              left: 0;
+            }}
+
+            button, select {{
+              padding: 6px 8px;
+              cursor: pointer;
+            }}
           </style>
         </head>
 
@@ -1235,7 +1257,7 @@ elif feature == "✨ Highlight Text":
             <button onclick="undo()">↩ Undo</button>
             <button onclick="prevPage()">⬅ Prev</button>
             <button onclick="nextPage()">Next ➡</button>
-            <button onclick="exportPDF()">⬇ Prepare Download</button>
+            <button onclick="exportPDF()">⬇ Download</button>
           </div>
 
           <div id="container">
@@ -1257,7 +1279,6 @@ elif feature == "✨ Highlight Text":
             const drawCtx = drawCanvas.getContext("2d");
 
             const annotations = {{}};
-            let history = [];
 
             function setTool(t) {{
               tool = t;
@@ -1275,27 +1296,27 @@ elif feature == "✨ Highlight Text":
             }}
 
             function redraw() {{
-              drawCtx.clearRect(0,0,drawCanvas.width,drawCanvas.height);
+              drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
               (annotations[currentPage] || []).forEach(path => {{
                 drawCtx.globalCompositeOperation = path.mode;
                 drawCtx.strokeStyle = path.color;
                 drawCtx.lineWidth = path.width;
                 drawCtx.globalAlpha = path.alpha;
                 drawCtx.beginPath();
-                path.points.forEach((p,i)=> i?drawCtx.lineTo(p.x,p.y):drawCtx.moveTo(p.x,p.y));
+                path.points.forEach((p, i) => {{
+                  if (i === 0) drawCtx.moveTo(p.x, p.y);
+                  else drawCtx.lineTo(p.x, p.y);
+                }});
                 drawCtx.stroke();
               }});
               drawCtx.globalAlpha = 1;
               drawCtx.globalCompositeOperation = "source-over";
             }}
 
-            drawCanvas.onmousedown = e => {{
+            drawCanvas.addEventListener("mousedown", e => {{
               drawing = true;
-              let path = {{
-                points: [{{
-                  x: e.offsetX,
-                  y: e.offsetY
-                }}],
+              const path = {{
+                points: [{{ x: e.offsetX, y: e.offsetY }}],
                 color: tool === "highlight" ? "yellow" : penColor,
                 width: tool === "highlight" ? 16 : 2,
                 alpha: tool === "highlight" ? 0.3 : 1,
@@ -1303,16 +1324,16 @@ elif feature == "✨ Highlight Text":
               }};
               annotations[currentPage] = annotations[currentPage] || [];
               annotations[currentPage].push(path);
-            }}
+            }});
 
-            drawCanvas.onmousemove = e => {{
+            drawCanvas.addEventListener("mousemove", e => {{
               if (!drawing) return;
               const path = annotations[currentPage].slice(-1)[0];
               path.points.push({{ x: e.offsetX, y: e.offsetY }});
               redraw();
-            }}
+            }});
 
-            drawCanvas.onmouseup = () => drawing = false;
+            drawCanvas.addEventListener("mouseup", () => drawing = false);
 
             async function renderPage(num) {{
               const page = await pdfDoc.getPage(num);
@@ -1339,11 +1360,13 @@ elif feature == "✨ Highlight Text":
 
             async function exportPDF() {{
               const pdf = await PDFLib.PDFDocument.load(pdfData);
+
               for (let i = 1; i <= pdf.getPageCount(); i++) {{
                 if (!annotations[i]) continue;
-                const page = pdf.getPages()[i-1];
+                const page = pdf.getPages()[i - 1];
                 const png = drawCanvas.toDataURL("image/png");
                 const img = await pdf.embedPng(png);
+
                 page.drawImage(img, {{
                   x: 0,
                   y: 0,
@@ -1353,11 +1376,13 @@ elif feature == "✨ Highlight Text":
               }}
 
               const bytes = await pdf.save();
-              const b64 = btoa(String.fromCharCode(...bytes));
-              window.parent.postMessage({{
-                type: "ANNOTATED_PDF",
-                data: b64
-              }}, "*");
+              const blob = new Blob([bytes], {{ type: "application/pdf" }});
+              const link = document.createElement("a");
+              link.href = URL.createObjectURL(blob);
+              link.download = "highlighted.pdf";
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
             }}
 
             pdfjsLib.getDocument({{ data: pdfData }}).promise.then(pdf => {{
@@ -1372,26 +1397,9 @@ elif feature == "✨ Highlight Text":
         components.html(
             html_code,
             height=900,
-            scrolling=True,
-            key="pdf_highlighter"
+            scrolling=True
         )
 
-    # 🔹 RECEIVE PDF FROM JS
-    if "pdf_highlighter" in st.session_state:
-        msg = st.session_state["pdf_highlighter"]
-        if isinstance(msg, dict) and msg.get("type") == "ANNOTATED_PDF":
-            st.session_state["annotated_pdf"] = msg["data"]
-
-    # 🔹 STREAMLIT DOWNLOAD BUTTON
-    if "annotated_pdf" in st.session_state:
-        st.markdown("### ⬇ Download Highlighted PDF")
-        st.download_button(
-            label="⬇ Download PDF",
-            data=base64.b64decode(st.session_state["annotated_pdf"]),
-            file_name="highlighted.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
 
 
 # Feature 11 : Reorder PDF Pages
@@ -1502,6 +1510,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
