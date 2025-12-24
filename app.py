@@ -1435,7 +1435,7 @@ elif feature == "📸 PDF to Images":
 # Feature 10: Highlight Text (Visual PDF Editor)
 elif feature == "✨ Highlight Text":
     st.header("Highlight Text (Visual Editor)")
-    st.write("Visually annotate PDFs with pen, highlight, eraser, undo and page navigation.")
+    st.write("Visually annotate PDFs with pen, colors, eraser, undo and page navigation.")
 
     uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
 
@@ -1443,30 +1443,26 @@ elif feature == "✨ Highlight Text":
         pdf_bytes = uploaded_file.read()
         pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
-        if "highlighted_pdf" not in st.session_state:
-            st.session_state.highlighted_pdf = None
-
-        html_code = f"""
+        html_code = """
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8" />
+<meta charset="UTF-8">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
 
 <style>
-body {{ margin:0; font-family: Arial; }}
-#toolbar {{
+body { margin:0; font-family: Arial; }
+#toolbar {
   background:#f4f4f4;
   padding:8px;
   display:flex;
   gap:8px;
-  align-items:center;
   border-bottom:1px solid #ccc;
-}}
-canvas {{ position:absolute; left:0; top:0; }}
-#container {{ position:relative; }}
-button, select {{ padding:5px 8px; cursor:pointer; }}
+}
+canvas { position:absolute; left:0; top:0; }
+#container { position:relative; }
+button, select { padding:6px 8px; cursor:pointer; }
 </style>
 </head>
 
@@ -1474,9 +1470,9 @@ button, select {{ padding:5px 8px; cursor:pointer; }}
 <div id="toolbar">
   <button onclick="setTool('highlight')">Highlight</button>
   <select id="penColor">
-    <option value="red">Red Pen</option>
-    <option value="blue">Blue Pen</option>
-    <option value="green">Green Pen</option>
+    <option value="red">Red</option>
+    <option value="blue">Blue</option>
+    <option value="green">Green</option>
   </select>
   <button onclick="setTool('pen')">Pen</button>
   <button onclick="setTool('eraser')">Eraser</button>
@@ -1492,99 +1488,97 @@ button, select {{ padding:5px 8px; cursor:pointer; }}
 </div>
 
 <script>
-const pdfData = atob("{pdf_base64}");
+const pdfData = atob("__PDF_BASE64__");
 let pdfDoc = null;
 let currentPage = 1;
 let tool = "highlight";
 let drawing = false;
-let history = {{}};
+let history = {};
 
 const pdfCanvas = document.getElementById("pdfCanvas");
 const drawCanvas = document.getElementById("drawCanvas");
 const pdfCtx = pdfCanvas.getContext("2d");
 const drawCtx = drawCanvas.getContext("2d");
 
-function setTool(t) {{ tool = t; }}
+function setTool(t){ tool = t; }
 
-function undo() {{
+function undo(){
   if (!history[currentPage] || history[currentPage].length === 0) return;
   history[currentPage].pop();
   redraw();
-}}
+}
 
-function redraw() {{
+function redraw(){
   drawCtx.clearRect(0,0,drawCanvas.width,drawCanvas.height);
-  (history[currentPage] || []).forEach(path => {{
-    drawCtx.globalCompositeOperation = path.mode;
-    drawCtx.strokeStyle = path.color;
-    drawCtx.lineWidth = path.width;
-    drawCtx.globalAlpha = path.alpha;
+  (history[currentPage] || []).forEach(p=>{
+    drawCtx.globalCompositeOperation = p.mode;
+    drawCtx.strokeStyle = p.color;
+    drawCtx.lineWidth = p.width;
+    drawCtx.globalAlpha = p.alpha;
     drawCtx.beginPath();
-    path.points.forEach((p,i)=> i?drawCtx.lineTo(p.x,p.y):drawCtx.moveTo(p.x,p.y));
+    p.points.forEach((pt,i)=> i?drawCtx.lineTo(pt.x,pt.y):drawCtx.moveTo(pt.x,pt.y));
     drawCtx.stroke();
-  }});
+  });
   drawCtx.globalAlpha = 1;
   drawCtx.globalCompositeOperation = "source-over";
-}}
+}
 
-drawCanvas.addEventListener("mousedown", e => {{
+drawCanvas.addEventListener("mousedown", e=>{
   drawing = true;
   if (!history[currentPage]) history[currentPage] = [];
+  const color = tool==="pen" ? document.getElementById("penColor").value : "yellow";
+  const alpha = tool==="highlight" ? 0.3 : 1;
+  const width = tool==="highlight" ? 14 : 2;
+  const mode = tool==="eraser" ? "destination-out" : "source-over";
+  history[currentPage].push({ color, alpha, width, mode, points:[{x:e.offsetX,y:e.offsetY}] });
+});
 
-  let color = tool==="pen" ? document.getElementById("penColor").value : "yellow";
-  let alpha = tool==="highlight" ? 0.3 : 1;
-  let width = tool==="highlight" ? 14 : 2;
-  let mode = tool==="eraser" ? "destination-out" : "source-over";
-
-  history[currentPage].push({{
-    color, alpha, width, mode,
-    points:[{{x:e.offsetX,y:e.offsetY}}]
-  }});
-}});
-
-drawCanvas.addEventListener("mousemove", e => {{
-  if (!drawing) return;
-  history[currentPage].slice(-1)[0].points.push({{x:e.offsetX,y:e.offsetY}});
+drawCanvas.addEventListener("mousemove", e=>{
+  if(!drawing) return;
+  history[currentPage].slice(-1)[0].points.push({x:e.offsetX,y:e.offsetY});
   redraw();
-}});
+});
 
 drawCanvas.addEventListener("mouseup", ()=> drawing=false);
 
-function renderPage(num) {{
-  pdfDoc.getPage(num).then(page=>{
-    const vp = page.getViewport({{scale:1.5}});
+function renderPage(n){
+  pdfDoc.getPage(n).then(page=>{
+    const vp = page.getViewport({ scale: 1.5 });
     pdfCanvas.width = drawCanvas.width = vp.width;
     pdfCanvas.height = drawCanvas.height = vp.height;
-    page.render({{canvasContext:pdfCtx, viewport:vp}});
+    page.render({ canvasContext: pdfCtx, viewport: vp });
     redraw();
   });
-}}
+}
 
-function prevPage() {{ if(currentPage>1){{currentPage--; renderPage(currentPage);}} }}
-function nextPage() {{ if(currentPage<pdfDoc.numPages){{currentPage++; renderPage(currentPage);}} }}
+function prevPage(){ if(currentPage>1){ currentPage--; renderPage(currentPage);} }
+function nextPage(){ if(currentPage<pdfDoc.numPages){ currentPage++; renderPage(currentPage);} }
 
-async function exportPDF() {{
+async function exportPDF(){
   const pdf = await PDFLib.PDFDocument.load(pdfData);
-  for (let i=1;i<=pdf.getPageCount();i++) {{
-    if (!history[i]) continue;
+  for(let i=1;i<=pdf.getPageCount();i++){
+    if(!history[i]) continue;
     renderPage(i);
     const png = drawCanvas.toDataURL("image/png");
     const img = await pdf.embedPng(png);
     const page = pdf.getPages()[i-1];
-    page.drawImage(img, {{
-      x:0, y:0, width:page.getWidth(), height:page.getHeight()
-    }});
-  }}
+    page.drawImage(img,{x:0,y:0,width:page.getWidth(),height:page.getHeight()});
+  }
   const bytes = await pdf.save();
   const b64 = btoa(String.fromCharCode(...bytes));
-  window.parent.postMessage({{type:"pdf_download", data:b64}}, "*");
-}}
+  window.parent.postMessage({ type:"pdf_download", data:b64 }, "*");
+}
 
-pdfjsLib.getDocument({{data:pdfData}}).promise.then(doc=>{{ pdfDoc=doc; renderPage(1); }});
+pdfjsLib.getDocument({ data: pdfData }).promise.then(doc=>{
+  pdfDoc = doc;
+  renderPage(1);
+});
 </script>
 </body>
 </html>
 """
+
+        html_code = html_code.replace("__PDF_BASE64__", pdf_base64)
 
         result = components.html(
             html_code,
@@ -1593,20 +1587,14 @@ pdfjsLib.getDocument({{data:pdfData}}).promise.then(doc=>{{ pdfDoc=doc; renderPa
             key="pdf_highlighter"
         )
 
-        # Receive PDF from JS and show Streamlit download
         if result:
-            st.session_state.highlighted_pdf = result
-
-    if st.session_state.get("highlighted_pdf"):
-        st.download_button(
-            label="Download Highlighted PDF",
-            data=base64.b64decode(st.session_state.highlighted_pdf),
-            file_name="highlighted_document.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
-
-
+            st.download_button(
+                "Download Highlighted PDF",
+                data=base64.b64decode(result),
+                file_name="highlighted_document.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
 
 
 # Feature 11 : Reorder PDF Pages
@@ -1717,6 +1705,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
