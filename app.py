@@ -1734,42 +1734,83 @@ function prevPage(){ if(currentPage>1){ currentPage--; renderPage(currentPage);}
 function nextPage(){ if(currentPage<pdfDoc.numPages){ currentPage++; renderPage(currentPage);} }
 
 async function downloadPDF(){
-  const pdf = await PDFLib.PDFDocument.load(pdfData);
+  try {
+    // Create a temporary canvas for export with proper dimensions
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    const pdf = await PDFLib.PDFDocument.load(pdfData);
 
-  for(let i=1;i<=pdf.getPageCount();i++){
-    if(!history[i]) continue;
-
-    // Wait for the page to render completely before capturing
-    await new Promise(resolve => {
-      pdfDoc.getPage(i).then(page=>{
-        const vp = page.getViewport({ scale: 1.5 });
-        pdfCanvas.width = drawCanvas.width = vp.width;
-        pdfCanvas.height = drawCanvas.height = vp.height;
-        page.render({ canvasContext: pdfCtx, viewport: vp }).promise.then(() => {
-          redraw();
-          resolve();
+    for(let i=1; i<=pdf.getPageCount(); i++){
+      // Render page (even if no annotations) to get proper dimensions
+      const page = await pdfDoc.getPage(i);
+      const vp = page.getViewport({ scale: 1.5 });
+      
+      tempCanvas.width = vp.width;
+      tempCanvas.height = vp.height;
+      
+      // Render PDF page to temp canvas
+      await page.render({ 
+        canvasContext: tempCtx, 
+        viewport: vp 
+      }).promise;
+      
+      // Draw annotations on top if they exist
+      if(history[i] && history[i].length > 0){
+        history[i].forEach(p=>{
+          tempCtx.globalCompositeOperation = p.mode;
+          tempCtx.strokeStyle = p.color;
+          tempCtx.lineWidth = p.width;
+          tempCtx.globalAlpha = p.alpha;
+          tempCtx.beginPath();
+          p.points.forEach((pt,idx)=> {
+            if(idx === 0) {
+              tempCtx.moveTo(pt.x, pt.y);
+            } else {
+              tempCtx.lineTo(pt.x, pt.y);
+            }
+          });
+          tempCtx.stroke();
         });
+        // Reset context
+        tempCtx.globalAlpha = 1;
+        tempCtx.globalCompositeOperation = "source-over";
+      }
+      
+      // Convert canvas to PNG and embed in PDF
+      const pngDataUrl = tempCanvas.toDataURL("image/png");
+      const pngImageBytes = pngDataUrl.split(',')[1];
+      const pngImage = await pdf.embedPng(pngImageBytes);
+      
+      const pdfPage = pdf.getPages()[i-1];
+      const { width, height } = pdfPage.getSize();
+      
+      // Draw the combined image over the PDF page
+      pdfPage.drawImage(pngImage, {
+        x: 0,
+        y: 0,
+        width: width,
+        height: height
       });
-    });
+    }
 
-    const png = drawCanvas.toDataURL("image/png");
-    const img = await pdf.embedPng(png);
-    const page = pdf.getPages()[i-1];
-
-    page.drawImage(img,{
-      x:0,
-      y:0,
-      width:page.getWidth(),
-      height:page.getHeight()
-    });
+    // Save and download
+    const pdfBytes = await pdf.save();
+    const blob = new Blob([pdfBytes], {type: "application/pdf"});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "highlighted_document.pdf";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    alert('PDF downloaded successfully!');
+  } catch(error) {
+    console.error('Download error:', error);
+    alert('Error downloading PDF: ' + error.message);
   }
-
-  const bytes = await pdf.save();
-  const blob = new Blob([bytes], {type:"application/pdf"});
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = "highlighted_document.pdf";
-  link.click();
 }
 
 pdfjsLib.getDocument({ data: pdfData }).promise.then(doc=>{
@@ -1789,8 +1830,6 @@ pdfjsLib.getDocument({ data: pdfData }).promise.then(doc=>{
             height=900,
             scrolling=True
         )
-
-
 
 
 # Feature 11 : Reorder PDF Pages
@@ -1901,6 +1940,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
