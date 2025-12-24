@@ -1193,213 +1193,242 @@ elif feature == "✨ Highlight Text":
     )
 
     if uploaded_file:
-        import base64
-        import streamlit.components.v1 as components
-
         pdf_bytes = uploaded_file.read()
         pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
         html_code = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8" />
-          <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-          <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
 
-          <style>
-            body {{
-              margin: 0;
-              font-family: Arial, sans-serif;
-            }}
+<style>
+body {{
+  margin: 0;
+  font-family: Arial, sans-serif;
+}}
 
-            #toolbar {{
-              padding: 8px;
-              background: #f4f4f4;
-              display: flex;
-              gap: 8px;
-              align-items: center;
-              border-bottom: 1px solid #ccc;
-              position: sticky;
-              top: 0;
-              z-index: 10;
-            }}
+#toolbar {{
+  padding: 8px;
+  background: #f5f5f5;
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid #ccc;
+  align-items: center;
+}}
 
-            #container {{
-              position: relative;
-            }}
+#container {{
+  position: relative;
+}}
 
-            canvas {{
-              position: absolute;
-              top: 0;
-              left: 0;
-            }}
+canvas {{
+  position: absolute;
+  left: 0;
+  top: 0;
+}}
 
-            button, select {{
-              padding: 6px 8px;
-              cursor: pointer;
-            }}
-          </style>
-        </head>
+button, select {{
+  padding: 6px 10px;
+  cursor: pointer;
+}}
+</style>
+</head>
 
-        <body>
-          <div id="toolbar">
-            <button onclick="setTool('highlight')">🖍 Highlight</button>
+<body>
 
-            <select onchange="setPenColor(this.value)">
-              <option value="red">Red Pen</option>
-              <option value="blue">Blue Pen</option>
-              <option value="green">Green Pen</option>
-            </select>
+<div id="toolbar">
+  <button onclick="setTool('highlight')">🖍 Highlight</button>
 
-            <button onclick="setTool('pen')">✏️ Pen</button>
-            <button onclick="setTool('eraser')">🧽 Eraser</button>
-            <button onclick="undo()">↩ Undo</button>
-            <button onclick="prevPage()">⬅ Prev</button>
-            <button onclick="nextPage()">Next ➡</button>
-            <button onclick="exportPDF()">⬇ Download</button>
-          </div>
+  <select onchange="setPenColor(this.value)">
+    <option value="">✏️ Pen Color</option>
+    <option value="red">Red</option>
+    <option value="blue">Blue</option>
+    <option value="green">Green</option>
+  </select>
 
-          <div id="container">
-            <canvas id="pdfCanvas"></canvas>
-            <canvas id="drawCanvas"></canvas>
-          </div>
+  <button onclick="setTool('eraser')">🧽 Eraser</button>
+  <button onclick="undo()">↩ Undo</button>
+  <button onclick="prevPage()">⬅ Prev</button>
+  <button onclick="nextPage()">Next ➡</button>
+  <button onclick="downloadPDF()">⬇ Download</button>
+</div>
 
-          <script>
-            const pdfData = atob("{pdf_base64}");
-            let pdfDoc = null;
-            let currentPage = 1;
-            let tool = "highlight";
-            let penColor = "red";
-            let drawing = false;
+<div id="container">
+  <canvas id="pdfCanvas"></canvas>
+  <canvas id="drawCanvas"></canvas>
+</div>
 
-            const pdfCanvas = document.getElementById("pdfCanvas");
-            const drawCanvas = document.getElementById("drawCanvas");
-            const pdfCtx = pdfCanvas.getContext("2d");
-            const drawCtx = drawCanvas.getContext("2d");
+<script>
+const pdfData = atob("{pdf_base64}");
+let pdfDoc = null;
+let currentPage = 1;
 
-            const annotations = {{}};
+let tool = "highlight";
+let penColor = "red";
+let drawing = false;
 
-            function setTool(t) {{
-              tool = t;
-            }}
+const history = {{}};
 
-            function setPenColor(c) {{
-              penColor = c;
-              tool = "pen";
-            }}
+const pdfCanvas = document.getElementById("pdfCanvas");
+const drawCanvas = document.getElementById("drawCanvas");
+const pdfCtx = pdfCanvas.getContext("2d");
+const drawCtx = drawCanvas.getContext("2d");
 
-            function undo() {{
-              if (!annotations[currentPage] || annotations[currentPage].length === 0) return;
-              annotations[currentPage].pop();
-              redraw();
-            }}
+function setTool(t) {{
+  tool = t;
+}}
 
-            function redraw() {{
-              drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
-              (annotations[currentPage] || []).forEach(path => {{
-                drawCtx.globalCompositeOperation = path.mode;
-                drawCtx.strokeStyle = path.color;
-                drawCtx.lineWidth = path.width;
-                drawCtx.globalAlpha = path.alpha;
-                drawCtx.beginPath();
-                path.points.forEach((p, i) => {{
-                  if (i === 0) drawCtx.moveTo(p.x, p.y);
-                  else drawCtx.lineTo(p.x, p.y);
-                }});
-                drawCtx.stroke();
-              }});
-              drawCtx.globalAlpha = 1;
-              drawCtx.globalCompositeOperation = "source-over";
-            }}
+function setPenColor(color) {{
+  if (!color) return;
+  penColor = color;
+  tool = "pen";
+}}
 
-            drawCanvas.addEventListener("mousedown", e => {{
-              drawing = true;
-              const path = {{
-                points: [{{ x: e.offsetX, y: e.offsetY }}],
-                color: tool === "highlight" ? "yellow" : penColor,
-                width: tool === "highlight" ? 16 : 2,
-                alpha: tool === "highlight" ? 0.3 : 1,
-                mode: tool === "eraser" ? "destination-out" : "source-over"
-              }};
-              annotations[currentPage] = annotations[currentPage] || [];
-              annotations[currentPage].push(path);
-            }});
+function undo() {{
+  if (!history[currentPage] || history[currentPage].length === 0) return;
+  history[currentPage].pop();
+  redraw();
+}}
 
-            drawCanvas.addEventListener("mousemove", e => {{
-              if (!drawing) return;
-              const path = annotations[currentPage].slice(-1)[0];
-              path.points.push({{ x: e.offsetX, y: e.offsetY }});
-              redraw();
-            }});
+function redraw() {{
+  drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+  if (!history[currentPage]) return;
 
-            drawCanvas.addEventListener("mouseup", () => drawing = false);
+  history[currentPage].forEach(path => {{
+    drawCtx.globalCompositeOperation = path.mode;
+    drawCtx.strokeStyle = path.color;
+    drawCtx.lineWidth = path.width;
+    drawCtx.globalAlpha = path.alpha;
+    drawCtx.beginPath();
+    path.points.forEach((p, i) => {{
+      if (i === 0) drawCtx.moveTo(p.x, p.y);
+      else drawCtx.lineTo(p.x, p.y);
+    }});
+    drawCtx.stroke();
+  }});
 
-            async function renderPage(num) {{
-              const page = await pdfDoc.getPage(num);
-              const viewport = page.getViewport({{ scale: 1.5 }});
-              pdfCanvas.width = drawCanvas.width = viewport.width;
-              pdfCanvas.height = drawCanvas.height = viewport.height;
-              await page.render({{ canvasContext: pdfCtx, viewport }}).promise;
-              redraw();
-            }}
+  drawCtx.globalAlpha = 1;
+  drawCtx.globalCompositeOperation = "source-over";
+}}
 
-            function nextPage() {{
-              if (currentPage < pdfDoc.numPages) {{
-                currentPage++;
-                renderPage(currentPage);
-              }}
-            }}
+drawCanvas.addEventListener("mousedown", e => {{
+  drawing = true;
 
-            function prevPage() {{
-              if (currentPage > 1) {{
-                currentPage--;
-                renderPage(currentPage);
-              }}
-            }}
+  if (!history[currentPage]) history[currentPage] = [];
 
-            async function exportPDF() {{
-              const pdf = await PDFLib.PDFDocument.load(pdfData);
+  let color = "yellow";
+  let alpha = 0.3;
+  let width = 15;
+  let mode = "source-over";
 
-              for (let i = 1; i <= pdf.getPageCount(); i++) {{
-                if (!annotations[i]) continue;
-                const page = pdf.getPages()[i - 1];
-                const png = drawCanvas.toDataURL("image/png");
-                const img = await pdf.embedPng(png);
+  if (tool === "pen") {{
+    color = penColor;
+    alpha = 1.0;
+    width = 2;
+  }}
 
-                page.drawImage(img, {{
-                  x: 0,
-                  y: 0,
-                  width: page.getWidth(),
-                  height: page.getHeight()
-                }});
-              }}
+  if (tool === "eraser") {{
+    mode = "destination-out";
+    alpha = 1.0;
+    width = 20;
+  }}
 
-              const bytes = await pdf.save();
-              const blob = new Blob([bytes], {{ type: "application/pdf" }});
-              const link = document.createElement("a");
-              link.href = URL.createObjectURL(blob);
-              link.download = "highlighted.pdf";
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-            }}
+  history[currentPage].push({{
+    color, alpha, width, mode,
+    points: [{{ x: e.offsetX, y: e.offsetY }}]
+  }});
+}});
 
-            pdfjsLib.getDocument({{ data: pdfData }}).promise.then(pdf => {{
-              pdfDoc = pdf;
-              renderPage(currentPage);
-            }});
-          </script>
-        </body>
-        </html>
-        """
+drawCanvas.addEventListener("mousemove", e => {{
+  if (!drawing) return;
+  const path = history[currentPage][history[currentPage].length - 1];
+  path.points.push({{ x: e.offsetX, y: e.offsetY }});
+  redraw();
+}});
+
+drawCanvas.addEventListener("mouseup", () => drawing = false);
+drawCanvas.addEventListener("mouseleave", () => drawing = false);
+
+async function renderPage(pageNum) {{
+  const page = await pdfDoc.getPage(pageNum);
+  const viewport = page.getViewport({{ scale: 1.5 }});
+
+  pdfCanvas.width = drawCanvas.width = viewport.width;
+  pdfCanvas.height = drawCanvas.height = viewport.height;
+
+  await page.render({{ canvasContext: pdfCtx, viewport }}).promise;
+  redraw();
+}}
+
+function prevPage() {{
+  if (currentPage <= 1) return;
+  currentPage--;
+  renderPage(currentPage);
+}}
+
+function nextPage() {{
+  if (currentPage >= pdfDoc.numPages) return;
+  currentPage++;
+  renderPage(currentPage);
+}}
+
+async function downloadPDF() {{
+  const pdf = await PDFLib.PDFDocument.load(pdfData);
+
+  for (const [pageNum, paths] of Object.entries(history)) {{
+    const page = pdf.getPages()[pageNum - 1];
+    const canvas = document.createElement("canvas");
+    canvas.width = page.getWidth();
+    canvas.height = page.getHeight();
+    const ctx = canvas.getContext("2d");
+
+    paths.forEach(p => {{
+      ctx.globalCompositeOperation = p.mode;
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = p.width;
+      ctx.globalAlpha = p.alpha;
+      ctx.beginPath();
+      p.points.forEach((pt, i) => {{
+        if (i === 0) ctx.moveTo(pt.x, canvas.height - pt.y);
+        else ctx.lineTo(pt.x, canvas.height - pt.y);
+      }});
+      ctx.stroke();
+    }});
+
+    const png = await pdf.embedPng(canvas.toDataURL("image/png"));
+    page.drawImage(png, {{
+      x: 0,
+      y: 0,
+      width: page.getWidth(),
+      height: page.getHeight()
+    }});
+  }}
+
+  const bytes = await pdf.save();
+  const blob = new Blob([bytes], {{ type: "application/pdf" }});
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "highlighted.pdf";
+  link.click();
+}}
+
+pdfjsLib.getDocument({{ data: pdfData }}).promise.then(pdf => {{
+  pdfDoc = pdf;
+  renderPage(currentPage);
+}});
+</script>
+
+</body>
+</html>
+"""
 
         components.html(
             html_code,
             height=900,
             scrolling=True
         )
-
 
 
 # Feature 11 : Reorder PDF Pages
@@ -1510,6 +1539,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
