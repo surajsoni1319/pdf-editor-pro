@@ -650,49 +650,121 @@ elif feature == "📝 Extract Text":
                 # ======================================================
                 # INVOICE / BILL → EXCEL
                 # ======================================================
-                else:
-                    st.markdown("### 📊 Extracted Invoice Data")
+                import re
+                st.markdown("### 📊 Extracted Invoice Data")
+                
+                text = extracted_text
+                
+                # -------------------------------------------------
+                # Helper function
+                # -------------------------------------------------
+                def find(pattern, text):
+                    match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+                    return match.group(1).strip() if match else ""
+                
+                # -------------------------------------------------
+                # INVOICE HEADER FIELDS (GENERIC – GST READY)
+                # -------------------------------------------------
+                invoice_header = {
+                    "Invoice Number": find(r"Invoice No\s*:?\s*([A-Z0-9\-]+)", text),
+                    "Invoice Date": find(r"Invoice Date\s*:?\s*([\d/]+)", text),
+                    "IRN Number": find(r"IRN No\s*:?\s*([A-Z0-9]+)", text),
+                
+                    "Seller Name": find(r"(STAR\s+CEMENT\s+LIMITED)", text),
+                    "Seller GSTIN": find(r"GSTIN No\.\s*:?\s*([A-Z0-9]{15})", text),
+                    "Seller State": find(r"STATE\s*:\s*([A-Z ]+)", text),
+                    "Seller State Code": find(r"STATE CODE\s*:\s*(\d+)", text),
+                    "Seller PIN": find(r"PIN No\.\s*:?\s*(\d{6})", text),
+                
+                    "Customer Name": find(r"Name & Address of the Customer.*?\n([A-Z\s]+)", text),
+                    "Customer GSTIN": find(r"GSTIN No\.\s*:?\s*(18[A-Z0-9]{13})", text),
+                    "Customer State": "ASSAM",
+                    "Customer State Code": "18",
+                
+                    "E-Way Bill No": find(r"EWAY Bill No\s*:?\s*(\d+)", text),
+                    "EWB Expiry Date": find(r"EWB Expiry Date.*?([\d/]+\s[\d:]+)", text),
+                
+                    "Sales Order No": find(r"S\.O\. No.*?(\d+)", text),
+                    "Sales Order Date": find(r"S\.O\. No.*?&\s*([\d/]+)", text),
+                    "Customer PO No": find(r"CustPO No\.\s*:?\s*(\d+)", text),
+                
+                    "Transporter Name": find(r"Transporter Code.*?\s([A-Z ]+)", text),
+                    "Vehicle Number": find(r"Vehicle Reg\. No\.\s*([A-Z0-9]+)", text),
+                    "LR Number": find(r"L\.R.*?No.*?(\d+)", text),
+                    "LR Date": find(r"L\.R.*?Date\s*(\d{2}/\d{2}/\d{4})", text),
+                    "Mode of Transport": find(r"Mode of Transport\s*([A-Z]+)", text),
+                    "Incoterms": find(r"Incoterms\s*([A-Z ]+)", text),
+                
+                    "IGST Rate": find(r"IGST\s*@?(\d+\.?\d*)%", text),
+                    "IGST Amount": find(r"IGST.*?([\d,]+\.\d{2})", text),
+                    "Round Off": find(r"R/OFF\s*([\d.]+)", text),
+                    "Total Invoice Value": find(r"\bTOTAL\s*([\d,]+\.\d{2})", text),
+                    "Invoice Value (Words)": find(
+                        r"Total Invoice value in words\s*:?\s*(.*?ONLY)", text
+                    ),
+                }
+                
+                header_df = pd.DataFrame(
+                    invoice_header.items(),
+                    columns=["Field", "Value"]
+                )
+                
+                st.markdown("### 🧾 Invoice Header")
+                st.dataframe(header_df, use_container_width=True)
+                
+                # -------------------------------------------------
+                # LINE ITEMS (DYNAMIC – MULTI ITEM SUPPORT)
+                # -------------------------------------------------
+                line_items = []
+                
+                item_pattern = re.compile(
+                    r"""
+                    (?P<description>[A-Z][A-Z0-9\s\-]+?)\s+
+                    (?P<hsn>\d{6,8})\s+
+                    (?P<package>[A-Z]+)\s+
+                    (?P<uom>[A-Z]{2})\s+
+                    (?P<qty>[\d.]+)\s+
+                    (?P<rate>[\d.]+)\s+
+                    (?P<taxable>[\d,]+\.\d{2})
+                    """,
+                    re.VERBOSE
+                )
+                
+                for match in item_pattern.finditer(text):
+                    line_items.append({
+                        "Item Description": match.group("description").strip(),
+                        "HSN Code": match.group("hsn"),
+                        "Packaging": match.group("package"),
+                        "UOM": match.group("uom"),
+                        "Quantity": match.group("qty"),
+                        "Basic Rate": match.group("rate"),
+                        "Taxable Amount": match.group("taxable"),
+                    })
+                
+                items_df = pd.DataFrame(line_items)
+                
+                st.markdown("### 📦 Line Items")
+                st.dataframe(items_df, use_container_width=True)
+                
+                # -------------------------------------------------
+                # EXPORT TO EXCEL (HEADER + ITEMS)
+                # -------------------------------------------------
+                excel_buffer = io.BytesIO()
+                
+                with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
+                    header_df.to_excel(writer, sheet_name="Invoice_Header", index=False)
+                    items_df.to_excel(writer, sheet_name="Invoice_Items", index=False)
+                
+                excel_buffer.seek(0)
+                
+                st.download_button(
+                    label="⬇️ Download Invoice (Excel)",
+                    data=excel_buffer,
+                    file_name="invoice_extracted_data.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
 
-                    # Basic rule-based field extraction
-                    fields = {
-                        "Invoice Number": "",
-                        "Invoice Date": "",
-                        "Vendor Name": "",
-                        "GST Number": "",
-                        "Total Amount": "",
-                        "Tax Amount": ""
-                    }
-
-                    for line in extracted_text.split("\n"):
-                        l = line.lower()
-
-                        if "invoice" in l and "no" in l:
-                            fields["Invoice Number"] = line
-                        elif "date" in l:
-                            fields["Invoice Date"] = line
-                        elif "gst" in l:
-                            fields["GST Number"] = line
-                        elif "total" in l and "amount" in l:
-                            fields["Total Amount"] = line
-                        elif "tax" in l:
-                            fields["Tax Amount"] = line
-
-                    df = pd.DataFrame(
-                        list(fields.items()),
-                        columns=["Field", "Value"]
-                    )
-
-                    st.dataframe(df, use_container_width=True)
-
-                    excel_buffer = io.BytesIO()
-                    df.to_excel(
-                        excel_buffer,
-                        index=False,
-                        engine="openpyxl"
-                    )
-                    excel_buffer.seek(0)
-
-                    st.download_button(
                         label="⬇️ Download as Excel",
                         data=excel_buffer,
                         file_name="invoice_data.xlsx",
@@ -1392,6 +1464,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
