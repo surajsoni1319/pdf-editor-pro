@@ -1,4 +1,5 @@
 import streamlit as st
+import pytesseract # for ocr
 import pandas as pd
 import PyPDF2
 from PIL import Image
@@ -1391,6 +1392,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
