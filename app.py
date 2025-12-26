@@ -568,6 +568,7 @@ elif feature == "💧 Add Watermark":
             "⬇️ Download Final Watermarked PDF"
         )
 
+
 # Feature 6: Extract Text (With OCR Support)
 elif feature == "📝 Extract Text":
     st.header("📝 Extract Text from PDF")
@@ -600,8 +601,9 @@ elif feature == "📝 Extract Text":
                 if extract_method == "Normal (Text-based PDF)":
                     reader = PyPDF2.PdfReader(uploaded_file)
                     for page in reader.pages:
-                        if page.extract_text():
-                            extracted_text += page.extract_text() + "\n"
+                        txt = page.extract_text()
+                        if txt:
+                            extracted_text += txt + "\n"
 
                 # ===============================
                 # OCR EXTRACTION
@@ -631,7 +633,7 @@ elif feature == "📝 Extract Text":
                     )
 
                 # ======================================================
-                # INVOICE / BILL → SMART EXTRACTION
+                # INVOICE / BILL → SAFE SMART EXTRACTION
                 # ======================================================
                 else:
                     import re
@@ -640,55 +642,68 @@ elif feature == "📝 Extract Text":
 
                     lines = [l.strip() for l in extracted_text.split("\n") if l.strip()]
 
-                    # ---------------- HEADER EXTRACTION ----------------
-                    def get_next_value(keyword):
+                    # -------------------------------------------------
+                    # SAFE HELPERS (NO INDEX ERRORS)
+                    # -------------------------------------------------
+                    def safe_next_line(keyword):
                         for i, l in enumerate(lines):
                             if keyword in l.upper():
                                 if i + 1 < len(lines):
                                     return lines[i + 1].replace(":", "").strip()
                         return ""
 
+                    def safe_find_group(pattern):
+                        for l in lines:
+                            m = re.search(pattern, l, re.IGNORECASE)
+                            if m:
+                                return m.group(1)
+                        return ""
+
+                    def safe_find_line(pattern):
+                        for l in lines:
+                            if re.search(pattern, l, re.IGNORECASE):
+                                return l
+                        return ""
+
+                    # -------------------------------------------------
+                    # INVOICE HEADER (CRASH-PROOF)
+                    # -------------------------------------------------
                     invoice_header = {
-                        "Invoice Number": get_next_value("INVOICE NO"),
-                        "Invoice Date": get_next_value("INVOICE DATE"),
-                        "IRN Number": get_next_value("IRN"),
-                        "E-Way Bill No": get_next_value("EWAY"),
-                        "Seller GSTIN": next(
-                            (re.findall(r"\b\d{2}[A-Z]{5}\d{4}[A-Z]\dZ[A-Z0-9]\b", l)[0]
-                             for l in lines if re.findall(r"\b\d{2}[A-Z]{5}\d{4}[A-Z]\dZ[A-Z0-9]\b", l)),
-                            ""
+                        "Invoice Number": safe_next_line("INVOICE NO"),
+                        "Invoice Date": safe_next_line("INVOICE DATE"),
+                        "IRN Number": safe_find_group(r"IRN\s*NO[:\s]*([A-Z0-9\-]+)"),
+                        "E-Way Bill No": safe_find_group(r"EWAY\s*BILL\s*NO[:\s]*(\d+)"),
+                        "Seller GSTIN": safe_find_group(
+                            r"\b\d{2}[A-Z]{5}\d{4}[A-Z]\dZ[A-Z0-9]\b"
                         ),
-                        "Vehicle Number": next(
-                            (re.findall(r"[A-Z]{2}\d{2}[A-Z]{1,2}\d{4}", l)[0]
-                             for l in lines if "VEHICLE" in l.upper()),
-                            ""
+                        "Vehicle Number": safe_find_group(
+                            r"[A-Z]{2}\d{2}[A-Z]{1,2}\d{4}"
                         ),
-                        "Total Invoice Value": next(
-                            (re.findall(r"[\d,]+\.\d{2}", l)[0]
-                             for l in lines if "TOTAL" in l.upper()),
-                            ""
+                        "Total Invoice Value": safe_find_group(
+                            r"TOTAL[:\s]*([\d,]+\.\d{2})"
                         ),
-                        "Invoice Value (Words)": next(
-                            (l for l in lines if "RUPEES" in l.upper()),
-                            ""
+                        "Invoice Value (Words)": safe_find_line(
+                            r"RUPEES.*ONLY"
                         ),
                     }
 
                     header_df = pd.DataFrame(
-                        invoice_header.items(),
-                        columns=["Field", "Value"]
+                        [{"Field": k, "Value": v} for k, v in invoice_header.items() if v]
                     )
 
                     st.markdown("### 🧾 Invoice Header")
                     st.dataframe(header_df, use_container_width=True)
 
-                    # ---------------- LINE ITEMS (GENERIC, OCR SAFE) ----------------
+                    # -------------------------------------------------
+                    # LINE ITEMS (OCR-SAFE, VENDOR-AGNOSTIC)
+                    # -------------------------------------------------
                     line_items = []
                     current_item = {}
 
                     for line in lines:
                         u = line.upper()
 
+                        # Item description detection
                         if (
                             u.isupper()
                             and len(u.split()) >= 2
@@ -731,14 +746,16 @@ elif feature == "📝 Extract Text":
                     st.markdown("### 📦 Line Items")
                     st.dataframe(items_df, use_container_width=True)
 
-                    # ---------------- EXPORT TO EXCEL ----------------
+                    # -------------------------------------------------
+                    # EXPORT TO EXCEL
+                    # -------------------------------------------------
                     excel_buffer = io.BytesIO()
                     with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
                         header_df.to_excel(writer, "Invoice_Header", index=False)
                         items_df.to_excel(writer, "Line_Items", index=False)
-                        pd.DataFrame({"Raw_Text": [extracted_text]}).to_excel(
-                            writer, "Raw_Text", index=False
-                        )
+                        pd.DataFrame(
+                            {"Raw_Text": [extracted_text]}
+                        ).to_excel(writer, "Raw_Text", index=False)
 
                     excel_buffer.seek(0)
 
@@ -752,7 +769,6 @@ elif feature == "📝 Extract Text":
 
             except Exception as e:
                 st.error(f"❌ Error during extraction: {str(e)}")
-
 
 
 
@@ -1443,6 +1459,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
