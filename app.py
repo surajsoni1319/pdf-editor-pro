@@ -567,7 +567,7 @@ elif feature == "💧 Add Watermark":
             "watermarked_document.pdf",
             "⬇️ Download Final Watermarked PDF"
         )
-# feature : OCR
+# feature: OCR
 elif feature == "📝 Extract Text":
     st.header("📝 Extract Text from PDF")
     st.write("Extract text from digital or scanned PDFs using OCR if required.")
@@ -642,7 +642,7 @@ elif feature == "📝 Extract Text":
                     )
 
                 # ======================================================
-                # INVOICE / BILL → COMPREHENSIVE EXTRACTION
+                # INVOICE / BILL → UNIVERSAL EXTRACTION
                 # ======================================================
                 else:
                     import re
@@ -654,128 +654,328 @@ elif feature == "📝 Extract Text":
                     text = extracted_text
                     
                     # -------------------------------------------------
-                    # Helper function for safe pattern matching
+                    # UNIVERSAL HELPER FUNCTIONS
                     # -------------------------------------------------
-                    def find(pattern, text, default=""):
+                    def find_multi(patterns, text, default=""):
+                        """Try multiple patterns and return first match"""
                         try:
-                            match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
-                            return match.group(1).strip() if match else default
+                            for pattern in patterns if isinstance(patterns, list) else [patterns]:
+                                match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+                                if match:
+                                    return match.group(1).strip()
+                            return default
                         except:
                             return default
                     
-                    def find_all(pattern, text):
+                    def find_all_multi(patterns, text):
+                        """Try multiple patterns and return all matches"""
                         try:
-                            return re.findall(pattern, text, re.IGNORECASE | re.DOTALL)
+                            for pattern in patterns if isinstance(patterns, list) else [patterns]:
+                                matches = re.findall(pattern, text, re.IGNORECASE | re.DOTALL)
+                                if matches:
+                                    return matches
+                            return []
                         except:
                             return []
                     
                     # -------------------------------------------------
-                    # COMPREHENSIVE INVOICE HEADER EXTRACTION
+                    # UNIVERSAL INVOICE EXTRACTION
                     # -------------------------------------------------
                     invoice_data = {}
                     
-                    # Basic Invoice Info (more precise patterns)
-                    invoice_data["Invoice Number"] = find(r"Invoice\s+No[:\.\s]+([A-Z]{2}\d+)", text)
-                    if not invoice_data["Invoice Number"]:
-                        invoice_data["Invoice Number"] = find(r"Invoice\s+No[:\.\s]+(\d+)", text)
+                    # ========== INVOICE IDENTIFIERS ==========
+                    invoice_data["Invoice Number"] = find_multi([
+                        r"Invoice\s+No[\.:\s]+([A-Z]{2,4}\d+)",
+                        r"Invoice\s+No[\.:\s]+(\d+)",
+                        r"Invoice\s*#[:\s]*([A-Z0-9\-]+)",
+                        r"Bill\s+No[\.:\s]+([A-Z0-9\-]+)",
+                        r"Tax\s+Invoice[^\n]*\n[^\n]*\n[^\d]*(\d+)"
+                    ], text)
                     
-                    invoice_data["Invoice Date"] = find(r"Invoice\s+Date[:\.\s]+([\d/\-]+)", text)
-                    invoice_data["Due Date"] = find(r"Due\s+Date[:\.\s]+([\d/\-]+)", text)
-                    invoice_data["CIN Number"] = find(r"CIN\s+NO[\.:\s]+([A-Z0-9]+)", text)
-                    invoice_data["IRN Number"] = find(r"IRN\s+No[:\.\s]+([A-Za-z0-9\-]+)", text)
+                    invoice_data["Invoice Date"] = find_multi([
+                        r"Invoice\s+Date[\.:\s]+([\d/\-]+)",
+                        r"Dated[\.:\s]+([\d/\-]+)",
+                        r"Date[\.:\s]+([\d]{1,2}[/-][A-Za-z]{3}[/-][\d]{2,4})",
+                        r"Date[\.:\s]+([\d]{1,2}[/-][\d]{1,2}[/-][\d]{2,4})"
+                    ], text)
                     
-                    # E-Way Bill Info
-                    invoice_data["EWAY Bill No"] = find(r"EWAY\s+Bill\s+No[:\.\s]*(\d+)", text)
-                    invoice_data["EWB Expiry Date"] = find(r"EWB\s+Expiry\s+Date[/Time:\.\s]*([\d/\.\s:]+)", text)
+                    invoice_data["Due Date"] = find_multi([
+                        r"Due\s+Date[\.:\s]+([\d/\-]+)",
+                        r"Payment\s+Due[\.:\s]+([\d/\-]+)"
+                    ], text)
                     
-                    # Sales Order Info
-                    invoice_data["Sales Order No"] = find(r"S\.?O\.?\s+No[\.:\s&]*(\d+)", text)
-                    invoice_data["Sales Order Date"] = find(r"S\.?O\.?\s+No[^&\n]*&[^\d]*([\d/]+)", text)
-                    invoice_data["Customer PO No"] = find(r"(?:Cust|Customer)\s*PO\s+No[\.:\s]*(\d+)", text)
-                    invoice_data["Our Ref No"] = find(r"Our\s+Ref[\.:\s]*No[\.:\s]*([A-Z0-9]+)", text)
+                    # ========== ACKNOWLEDGMENT & REFERENCE ==========
+                    invoice_data["Ack No"] = find_multi([
+                        r"Ack\s+No[\.:\s]+([A-Z0-9]+)",
+                        r"Acknowledgment[\.:\s]+([A-Z0-9]+)"
+                    ], text)
                     
-                    # Delivery Info
-                    invoice_data["Delivery No"] = find(r"Delivery\s+No[\.:\s&]*(\d+)", text)
-                    invoice_data["Delivery Date"] = find(r"Delivery\s+No[^&\n]*&[^\d]*([\d/]+)", text)
-                    invoice_data["Shipment No"] = find(r"Shipment\s+No[\.:\s&]*(\d+)", text)
-                    invoice_data["Shipment Date"] = find(r"Shipment\s+No[^&\n]*&[^\d]*([\d/]+)", text)
+                    invoice_data["Ack Date"] = find_multi([
+                        r"Ack\s+Date[\.:\s]+([\d/\-]+)"
+                    ], text)
                     
-                    # Seller/Company Info
-                    invoice_data["Seller Name"] = find(r"(STAR\s+CEMENT\s+LIMITED|[A-Z\s&]+(?:LIMITED|LTD|PRIVATE|PVT))", text)
+                    invoice_data["IRN Number"] = find_multi([
+                        r"IRN[\.:\s]+([A-Za-z0-9\-]+)",
+                        r"IRN\s+No[\.:\s]+([A-Za-z0-9\-]+)"
+                    ], text)
                     
-                    # Extract all GSTIN numbers
-                    all_gstins = find_all(r"GSTIN\s+No[\.:\s]*([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9]{1}[A-Z]{1}[0-9A-Z]{1})", text)
+                    invoice_data["CIN Number"] = find_multi([
+                        r"CIN\s+NO[\.:\s]+([A-Z0-9]+)"
+                    ], text)
+                    
+                    # ========== E-WAY BILL ==========
+                    invoice_data["E-Way Bill No"] = find_multi([
+                        r"e-Way\s+Bill\s+No[\.:\s]+(\d+)",
+                        r"EWAY\s+Bill\s+No[\.:\s]+(\d+)",
+                        r"EWB\s+No[\.:\s]+(\d+)"
+                    ], text)
+                    
+                    invoice_data["EWB Expiry Date"] = find_multi([
+                        r"EWB\s+Expiry[^\n:]+([\d/\.\s:]+)",
+                        r"e-Way.*?Expiry[^\n:]+([\d/\.\s:]+)"
+                    ], text)
+                    
+                    # ========== ORDER DETAILS ==========
+                    invoice_data["Sales Order No"] = find_multi([
+                        r"S\.?O\.?\s+No[\.:\s]+(\d+)",
+                        r"Sales\s+Order[\.:\s]+([A-Z0-9\-]+)"
+                    ], text)
+                    
+                    invoice_data["Sales Order Date"] = find_multi([
+                        r"S\.?O\.?\s+No[^&\n]+&\s*([\d/]+)",
+                        r"S\.?O\.?\s+Date[\.:\s]+([\d/]+)"
+                    ], text)
+                    
+                    invoice_data["Purchase Order No"] = find_multi([
+                        r"(?:Cust|Customer|Buyer[^\n]*)\s*PO\s+No[\.:\s]+([A-Z0-9\-]+)",
+                        r"P\.?O\.?\s+No[\.:\s]+([A-Z0-9\-]+)",
+                        r"Buyer'?s?\s+Order\s+No[\.:\s]+([A-Z0-9\-]+)"
+                    ], text)
+                    
+                    invoice_data["Reference No"] = find_multi([
+                        r"(?:Our\s+)?Ref(?:erence)?[\.:\s]+No[\.:\s]+([A-Z0-9\-]+)",
+                        r"Reference\s+No[\.:\s&]+Date[^\n]*?([A-Z0-9\-]+)"
+                    ], text)
+                    
+                    # ========== DELIVERY/DISPATCH ==========
+                    invoice_data["Delivery Note No"] = find_multi([
+                        r"Delivery\s+(?:Note\s+)?No[\.:\s]+([A-Z0-9\-]+)",
+                        r"Dispatch\s+Doc\s+No[\.:\s]+([A-Z0-9\-]+)"
+                    ], text)
+                    
+                    invoice_data["Delivery Date"] = find_multi([
+                        r"Delivery\s+(?:Note\s+)?Date[\.:\s]+([\d/\-]+)",
+                        r"Delivery\s+No[^&\n]+&\s*([\d/]+)"
+                    ], text)
+                    
+                    invoice_data["Shipment No"] = find_multi([
+                        r"Shipment\s+No[\.:\s]+([A-Z0-9\-]+)"
+                    ], text)
+                    
+                    invoice_data["Shipment Date"] = find_multi([
+                        r"Shipment\s+No[^&\n]+&\s*([\d/]+)",
+                        r"Shipment\s+Date[\.:\s]+([\d/]+)"
+                    ], text)
+                    
+                    # ========== SELLER/SUPPLIER DETAILS ==========
+                    invoice_data["Seller Name"] = find_multi([
+                        r"^([A-Z][A-Z\s&\.]+(?:LIMITED|LTD|PVT|PRIVATE|LLP|ASSOCIATES|COMPANY))",
+                        r"(?:Seller|Supplier|From)[^\n:]*:\s*([A-Z][^\n]+(?:LIMITED|LTD|PVT))",
+                        r"(STAR\s+CEMENT\s+LIMITED)"
+                    ], text)
+                    
+                    # Extract all GSTIN
+                    all_gstins = find_all_multi([
+                        r"GSTIN[/\\]?UIN[\.:\s]*([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}[Z]{1}[0-9A-Z]{1})",
+                        r"GSTIN\s+No[\.:\s]*([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{3})"
+                    ], text)
+                    
                     if len(all_gstins) >= 1:
                         invoice_data["Seller GSTIN"] = all_gstins[0]
                     if len(all_gstins) >= 2:
                         invoice_data["Customer GSTIN"] = all_gstins[1]
+                    if len(all_gstins) >= 3:
+                        invoice_data["Ship To GSTIN"] = all_gstins[2]
                     
                     # Extract all PIN codes
-                    all_pins = find_all(r"PIN\s+No[\.:\s]*(\d{6})", text)
-                    if len(all_pins) >= 1:
-                        invoice_data["Seller PIN"] = all_pins[0]
-                    if len(all_pins) >= 2:
-                        invoice_data["Delivery PIN"] = all_pins[1]
+                    all_pins = find_all_multi([
+                        r"PIN[\.:\s]+(\d{6})",
+                        r"\b(\d{6})\b"
+                    ], text)
+                    # Filter valid Indian PINs
+                    valid_pins = [p for p in all_pins if p.startswith(('1','2','3','4','5','6','7','8','9'))]
+                    if len(valid_pins) >= 1:
+                        invoice_data["Seller PIN"] = valid_pins[0]
+                    if len(valid_pins) >= 2:
+                        invoice_data["Customer PIN"] = valid_pins[1]
                     
-                    # Extract all State Codes
-                    all_state_codes = find_all(r"STATE\s+CODE[:\s]*(\d+)", text)
+                    # Extract State Codes
+                    all_state_codes = find_all_multi([
+                        r"(?:State\s+)?Code[\.:\s]*(\d{1,2})",
+                        r"State\s+Name[^\n]+Code[\.:\s]*(\d{1,2})"
+                    ], text)
                     if len(all_state_codes) >= 1:
                         invoice_data["Seller State Code"] = all_state_codes[0]
                     if len(all_state_codes) >= 2:
-                        invoice_data["Delivery State Code"] = all_state_codes[1]
+                        invoice_data["Customer State Code"] = all_state_codes[1]
                     
-                    # Extract States
-                    all_states = find_all(r"STATE[:\s]+([A-Z\s]+?)(?=\n|GSTIN|STATE CODE|$)", text)
+                    # Extract State Names
+                    all_states = find_all_multi([
+                        r"State\s+Name[\.:\s]*([A-Z][A-Za-z\s]+?)(?:,|Code|\d|$)",
+                        r"STATE[\.:\s]*([A-Z\s]+?)(?:\n|STATE CODE|GSTIN)"
+                    ], text)
                     if len(all_states) >= 1:
                         invoice_data["Seller State"] = all_states[0].strip()
                     if len(all_states) >= 2:
-                        invoice_data["Delivery State"] = all_states[1].strip()
+                        invoice_data["Customer State"] = all_states[1].strip()
                     
-                    # Customer Info
-                    invoice_data["Customer Name"] = find(r"Name\s*&\s*Addr[^\n:]*Customer[^\n:]*:\s*([^\n]+)", text)
-                    invoice_data["Delivery Address"] = find(r"Delivery\s+Address[^\n:]*Ship\s+To[^\n:]*:\s*([^\n]+)", text)
+                    # ========== BUYER/CUSTOMER DETAILS ==========
+                    invoice_data["Customer Name"] = find_multi([
+                        r"(?:Consignee|Buyer|Customer|Bill\s+to)[^\n:]*:\s*([A-Z][^\n]+)",
+                        r"Name[^\n]*Customer[^\n:]*:\s*([^\n]+)"
+                    ], text)
                     
-                    # Transport Details
-                    invoice_data["Mode of Transport"] = find(r"Mode\s+of\s+Transport[:\s]*([A-Z][a-z]+)", text)
-                    invoice_data["Transporter Code"] = find(r"Transporter\s+Code[:\s&]*(\d+)", text)
-                    invoice_data["Transporter Name"] = find(r"Transporter\s+Code[^:&\n]*&\s*Name[:\s]*([\w\s]+?)(?=\n|Vehicle)", text)
-                    invoice_data["Vehicle Number"] = find(r"Vehicle\s+Reg[\.:\s]*No[\.:\s]*([A-Z0-9]+)", text)
-                    invoice_data["LR/RR No"] = find(r"L[\.\/]?R[\.\/]?R[\.\/]?R[\.:\s]*No[\.:\s&]*(\d+)", text)
-                    invoice_data["LR/RR Date"] = find(r"L[\.\/]?R[\.\/]?R[\.\/]?R[\.:\s]*No[^&\n]*&\s*Date[:\s]*([\d/]+)", text)
-                    invoice_data["Route Name"] = find(r"Route\s+Name[:\s]*([\w\s\-]+?)(?=\n|Incoterms)", text)
-                    invoice_data["Incoterms"] = find(r"Incoterms[:\s]*([\w\s]+?)(?=\n|Terms)", text)
-                    invoice_data["Destination"] = find(r"Destination[:\s]*([\w\s]+?)(?=\n|Batch|MFG)", text)
-                    invoice_data["Batch No"] = find(r"Batch\s+No[\.:\s]*([A-Z0-9]+)", text)
+                    invoice_data["Ship To Name"] = find_multi([
+                        r"(?:Ship\s+to|Delivery\s+Address)[^\n:]*:\s*([A-Z][^\n]+)"
+                    ], text)
                     
-                    # Financial Details
-                    invoice_data["Taxable Amount"] = find(r"Taxable\s+Amt[,\.:\s]*([\d,]+\.?\d*)", text)
-                    invoice_data["CGST"] = find(r"CGST[:\s\-]*([\d,]+\.?\d*)", text)
-                    invoice_data["SGST"] = find(r"SGST[:\s\-]*([\d,]+\.?\d*)", text)
-                    invoice_data["IGST Rate"] = find(r"IGST[:\s@]*(\d+\.?\d*)%", text)
-                    invoice_data["IGST Amount"] = find(r"IGST[:\s\-]*([\d,]+\.?\d*)", text)
-                    invoice_data["TCS"] = find(r"TCS[:\-\s]*([\d,]+\.?\d*)", text)
-                    invoice_data["Round Off"] = find(r"R[/]?OFF[:\s\-•]*([\-\d,\.]+)", text)
-                    invoice_data["Total Invoice Value"] = find(r"TOTAL[:\s]*([\d,]+\.?\d*)", text)
-                    invoice_data["Invoice Value in Words"] = find(r"(?:Total\s+)?Invoice\s+value\s+[Ii]n\s+words[:\s]*(.*?ONLY)", text)
+                    # ========== TRANSPORT DETAILS ==========
+                    invoice_data["Mode of Transport"] = find_multi([
+                        r"Mode\s+of\s+Transport[\.:\s]+([A-Za-z]+)",
+                        r"Transport\s+Mode[\.:\s]+([A-Za-z]+)"
+                    ], text)
                     
-                    # Additional Info
-                    invoice_data["Freight"] = find(r"FREIGHT[:\-\s]*([\d,]+\.?\d*)", text)
-                    invoice_data["Reverse Charge"] = find(r"Reverse\s+Charge[:\s]*(YES|NO)", text)
-                    invoice_data["POD"] = find(r"POD[:\s]*([\w\s]+?)(?=\n|L\.R)", text)
+                    # Transporter extraction
+                    transporter_line = find_multi([
+                        r"Transporter\s+Code\s*&\s*Name[\.:\s]+(\d+\s+[A-Z\s]+?)(?=\n|Vehicle|$)",
+                        r"Transporter[\.:\s]+([^\n]+)"
+                    ], text)
                     
-                    # Contact Info
-                    invoice_data["Guwahati Office"] = find(r"Guwahati\s+Off[:\s]*(.*?)(?=Kolkata|SUBJECT|\n\n)", text)
-                    invoice_data["Kolkata Office"] = find(r"Kolkata\s+Off[:\s]*(.*?)(?=SUBJECT|\n\n)", text)
-                    invoice_data["Jurisdiction"] = find(r"SUBJECT\s+TO\s+([\w\s]+)\s+JURISDICTION", text)
+                    if transporter_line and re.match(r'\d+\s+', transporter_line):
+                        parts = transporter_line.split(None, 1)
+                        if len(parts) >= 1:
+                            invoice_data["Transporter Code"] = parts[0]
+                        if len(parts) >= 2:
+                            invoice_data["Transporter Name"] = parts[1].strip()
+                    else:
+                        invoice_data["Transporter Name"] = transporter_line
+                    
+                    invoice_data["Vehicle Number"] = find_multi([
+                        r"Vehicle\s+(?:Reg\.?\s+)?No[\.:\s]+([A-Z]{2}\d{2}[A-Z]{1,2}\d{4})",
+                        r"Vehicle[\.:\s]+([A-Z]{2}\d{2}[A-Z]{1,2}\d{4})",
+                        r"Motor\s+Vehicle\s+No[\.:\s]+([A-Z0-9]+)"
+                    ], text)
+                    
+                    invoice_data["LR/RR No"] = find_multi([
+                        r"L[\.\/]?R[\.\/]?R\.?R[\.:\s]+No[\.:\s]+(\d+)",
+                        r"L\.R[\.:\s]+No[\.:\s]+(\d+)",
+                        r"Bill\s+of\s+Lading[\.:/]*LR-RR\s+No[\.:\s]+([A-Z0-9\-]+)"
+                    ], text)
+                    
+                    invoice_data["LR/RR Date"] = find_multi([
+                        r"L[\.\/]?R[\.\/]?R\.?R[\.:\s]+No[^&\n]+&\s*Date[\.:\s]+([\d/]+)",
+                        r"L\.R[\.:\s]+No[^&\n]+&\s*([\d/]+)"
+                    ], text)
+                    
+                    invoice_data["Route"] = find_multi([
+                        r"Route\s+Name[\.:\s]+([^\n]+?)(?=\n|Incoterms|$)",
+                        r"Route[\.:\s]+([^\n]+)"
+                    ], text)
+                    
+                    invoice_data["Destination"] = find_multi([
+                        r"Destination[\.:\s]+([A-Z0-9\s]+?)(?=\n|Batch|$)",
+                        r"Dispatched\s+through[\.:\s]+Destination[\.:\s]+([^\n]+)"
+                    ], text)
+                    
+                    invoice_data["Terms of Delivery"] = find_multi([
+                        r"Terms\s+of\s+Delivery[\.:\s]+([^\n]+)",
+                        r"Incoterms[\.:\s]+([^\n]+?)(?=\n|Terms|$)"
+                    ], text)
+                    
+                    invoice_data["Batch No"] = find_multi([
+                        r"Batch\s+No[\.:\s]+([A-Z0-9]+)"
+                    ], text)
+                    
+                    # ========== PAYMENT & FINANCIAL ==========
+                    invoice_data["Mode/Terms of Payment"] = find_multi([
+                        r"Mode[/\\]Terms\s+of\s+Payment[\.:\s]+([^\n]+)",
+                        r"Payment\s+Terms[\.:\s]+([^\n]+)"
+                    ], text)
+                    
+                    invoice_data["Taxable Amount"] = find_multi([
+                        r"Taxable\s+(?:Amount|Value)[\.:\s]*([\d,]+\.?\d*)",
+                        r"Total\s+Taxable[\.:\s]*([\d,]+\.?\d*)"
+                    ], text)
+                    
+                    invoice_data["CGST"] = find_multi([
+                        r"CGST[\.:\s@]*([\d,]+\.?\d*)"
+                    ], text)
+                    
+                    invoice_data["SGST"] = find_multi([
+                        r"SGST[\.:\s@]*([\d,]+\.?\d*)"
+                    ], text)
+                    
+                    invoice_data["IGST Rate"] = find_multi([
+                        r"IGST[\.:\s@]*(\d+\.?\d*)%"
+                    ], text)
+                    
+                    invoice_data["IGST Amount"] = find_multi([
+                        r"IGST[\.:\s]*([\d,]+\.?\d*)",
+                        r"Integrated\s+Tax[^\n]+Amount[\.:\s]*([\d,]+\.?\d*)"
+                    ], text)
+                    
+                    invoice_data["TCS"] = find_multi([
+                        r"TCS[\.:\-\s]*([\d,]+\.?\d*)"
+                    ], text)
+                    
+                    invoice_data["Round Off"] = find_multi([
+                        r"R[/\\]?OFF[\.:\s\-•]*([\-\d,\.]+)",
+                        r"Round\s+Off[\.:\s]*([\-\d,\.]+)"
+                    ], text)
+                    
+                    invoice_data["Total Amount"] = find_multi([
+                        r"TOTAL[\.:\s]*([\d,]+\.?\d*)",
+                        r"Total\s+Invoice[\.:\s]*([\d,]+\.?\d*)",
+                        r"Grand\s+Total[\.:\s]*([\d,]+\.?\d*)",
+                        r"₹\s*([\d,]+\.?\d*)\s*$"
+                    ], text)
+                    
+                    invoice_data["Amount in Words"] = find_multi([
+                        r"(?:Total\s+)?(?:Invoice\s+)?(?:value\s+)?[Ii]n\s+words[\.:\s]*(.*?ONLY)",
+                        r"(?:INR|Rs\.?)\s+([A-Z][a-z]+.*?[Oo]nly)"
+                    ], text)
+                    
+                    invoice_data["Reverse Charge"] = find_multi([
+                        r"(?:Amount\s+of\s+Tax\s+)?Subject\s+[Tt]o\s+Reverse\s+Charge[\.:\s]*(YES|NO|Y|N)",
+                        r"Reverse\s+Charge[\.:\s]*(YES|NO|Y|N)"
+                    ], text)
+                    
+                    # ========== ADDITIONAL INFO ==========
+                    invoice_data["Freight"] = find_multi([
+                        r"FREIGHT[\.:\-\s]*([\d,]+\.?\d*)"
+                    ], text)
+                    
+                    invoice_data["POD"] = find_multi([
+                        r"POD[\.:\s]+([^\n]+)"
+                    ], text)
                     
                     # -------------------------------------------------
-                    # LINE ITEMS EXTRACTION
+                    # UNIVERSAL LINE ITEMS EXTRACTION
                     # -------------------------------------------------
                     line_items = []
                     
-                    # Multiple patterns for different invoice formats
+                    # Multiple pattern attempts for different formats
                     patterns = [
-                        # Pattern 1: Standard format with all fields
+                        # Format 1: Star Cement style
+                        re.compile(
+                            r"(?P<sl>\d+)\s+"
+                            r"(?P<description>(?:CEMENT|CLINKER|GRADE)[^\n]+?)\s+"
+                            r"(?P<hsn>\d{6,8})\s+"
+                            r"(?P<qty>[\d,]+\.?\d*)\s+(?P<uom>[A-Z]{2,3})\s+"
+                            r"(?P<rate>[\d,]+\.?\d*)",
+                            re.IGNORECASE
+                        ),
+                        # Format 2: With package info
                         re.compile(
                             r"(?P<description>(?:CEMENT|CLINKER)[^\n]*?)\s+"
                             r"(?P<hsn>\d{6,8})\s+"
@@ -786,45 +986,59 @@ elif feature == "📝 Extract Text":
                             r"(?P<rate>[\d,.]+)",
                             re.IGNORECASE
                         ),
-                        # Pattern 2: Simplified format
+                        # Format 3: Simple table format
                         re.compile(
-                            r"(?P<description>[A-Z][A-Z\s]+)\s+"
-                            r"(?P<hsn>\d{6,8})\s+.*?"
-                            r"(?P<qty>[\d,.]+)\s+"
-                            r"(?P<rate>[\d,.]+)\s+"
+                            r"(?P<description>[A-Z][A-Z\s,\-:]+?)\s+"
+                            r"(?P<hsn>\d{6,8})\s+"
+                            r"(?P<qty>[\d,]+\.?\d*)\s+"
+                            r"(?P<rate>[\d,]+\.?\d*)\s+"
+                            r"(?P<per>[A-Z]{2,3})\s+"
                             r"(?P<amount>[\d,]+\.?\d*)",
                             re.IGNORECASE
                         )
                     ]
                     
                     for pattern in patterns:
-                        matches = pattern.finditer(text)
-                        for match in matches:
-                            item = {}
-                            try:
-                                item["Item Description"] = match.group("description").strip()
-                                item["HSN Code"] = match.group("hsn")
-                                if "package" in match.groupdict():
-                                    item["Package Type"] = match.group("package")
-                                if "bags" in match.groupdict() and match.group("bags"):
-                                    item["No of Bags"] = match.group("bags")
-                                if "uom" in match.groupdict():
-                                    item["UOM"] = match.group("uom")
-                                item["Quantity"] = match.group("qty")
-                                item["Basic Rate"] = match.group("rate")
-                                if "amount" in match.groupdict():
-                                    item["Amount"] = match.group("amount")
-                                line_items.append(item)
-                            except:
-                                continue
-                        
-                        if line_items:
-                            break
+                        matches = list(pattern.finditer(text))
+                        if matches:
+                            for match in matches:
+                                item = {}
+                                try:
+                                    groups = match.groupdict()
+                                    
+                                    if "sl" in groups and groups["sl"]:
+                                        item["Sl No"] = groups["sl"]
+                                    if "description" in groups:
+                                        item["Description"] = groups["description"].strip()
+                                    if "hsn" in groups:
+                                        item["HSN/SAC"] = groups["hsn"]
+                                    if "qty" in groups:
+                                        item["Quantity"] = groups["qty"]
+                                    if "uom" in groups:
+                                        item["UOM"] = groups["uom"]
+                                    if "rate" in groups:
+                                        item["Rate"] = groups["rate"]
+                                    if "per" in groups:
+                                        item["Per"] = groups["per"]
+                                    if "amount" in groups:
+                                        item["Amount"] = groups["amount"]
+                                    if "package" in groups and groups.get("package"):
+                                        item["Package"] = groups["package"]
+                                    if "bags" in groups and groups.get("bags"):
+                                        item["No of Bags"] = groups["bags"]
+                                    
+                                    if item:
+                                        line_items.append(item)
+                                except Exception as e:
+                                    continue
+                            
+                            if line_items:
+                                break
                     
                     # -------------------------------------------------
                     # DISPLAY EXTRACTED DATA
                     # -------------------------------------------------
-                    # Create DataFrame from invoice data (only non-empty values)
+                    # Remove empty values and create DataFrame
                     header_df = pd.DataFrame([
                         {"Field": k, "Value": v} 
                         for k, v in invoice_data.items() 
@@ -834,16 +1048,18 @@ elif feature == "📝 Extract Text":
                     st.markdown("### 🧾 Invoice Header Information")
                     if not header_df.empty:
                         st.dataframe(header_df, use_container_width=True)
+                        st.info(f"✅ Extracted {len(header_df)} header fields")
                     else:
-                        st.info("ℹ️ No header fields could be extracted")
+                        st.warning("⚠️ No header fields could be extracted")
                     
                     # Display Line Items
                     st.markdown("### 📦 Line Items")
                     if line_items:
                         items_df = pd.DataFrame(line_items)
                         st.dataframe(items_df, use_container_width=True)
+                        st.info(f"✅ Extracted {len(line_items)} line items")
                     else:
-                        st.info("ℹ️ No line items detected")
+                        st.warning("⚠️ No line items detected")
                     
                     # Show raw text for debugging
                     with st.expander("🔍 View Extracted Text (for debugging)"):
@@ -880,6 +1096,7 @@ elif feature == "📝 Extract Text":
                 st.error(f"❌ Error during extraction: {str(e)}")
                 import traceback
                 st.text_area("Error Details", traceback.format_exc(), height=200)
+
 
 
 
@@ -1570,6 +1787,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
