@@ -567,7 +567,7 @@ elif feature == "💧 Add Watermark":
             "watermarked_document.pdf",
             "⬇️ Download Final Watermarked PDF"
         )
-
+# feature : OCR
 elif feature == "📝 Extract Text":
     st.header("📝 Extract Text from PDF")
     st.write("Extract text from digital or scanned PDFs using OCR if required.")
@@ -674,12 +674,15 @@ elif feature == "📝 Extract Text":
                     # -------------------------------------------------
                     invoice_data = {}
                     
-                    # Basic Invoice Info
-                    invoice_data["Invoice Number"] = find(r"Invoice\s+No[:\.\s]*([A-Z0-9\-]+)", text)
-                    invoice_data["Invoice Date"] = find(r"Invoice\s+Date[:\.\s]*([\d/\-]+)", text)
-                    invoice_data["Due Date"] = find(r"Due\s+Date[:\.\s]*([\d/\-]+)", text)
-                    invoice_data["CIN Number"] = find(r"CIN\s+NO[\.:\s]*([A-Z0-9]+)", text)
-                    invoice_data["IRN Number"] = find(r"IRN\s+No[:\.\s]*([A-Za-z0-9\-]+)", text)
+                    # Basic Invoice Info (more precise patterns)
+                    invoice_data["Invoice Number"] = find(r"Invoice\s+No[:\.\s]+([A-Z]{2}\d+)", text)
+                    if not invoice_data["Invoice Number"]:
+                        invoice_data["Invoice Number"] = find(r"Invoice\s+No[:\.\s]+(\d+)", text)
+                    
+                    invoice_data["Invoice Date"] = find(r"Invoice\s+Date[:\.\s]+([\d/\-]+)", text)
+                    invoice_data["Due Date"] = find(r"Due\s+Date[:\.\s]+([\d/\-]+)", text)
+                    invoice_data["CIN Number"] = find(r"CIN\s+NO[\.:\s]+([A-Z0-9]+)", text)
+                    invoice_data["IRN Number"] = find(r"IRN\s+No[:\.\s]+([A-Za-z0-9\-]+)", text)
                     
                     # E-Way Bill Info
                     invoice_data["EWAY Bill No"] = find(r"EWAY\s+Bill\s+No[:\.\s]*(\d+)", text)
@@ -877,6 +880,7 @@ elif feature == "📝 Extract Text":
                 st.error(f"❌ Error during extraction: {str(e)}")
                 import traceback
                 st.text_area("Error Details", traceback.format_exc(), height=200)
+
 
 
 # Feature 7: Extract Images (ROBUST – LOGOS SUPPORTED)
@@ -1566,6 +1570,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
