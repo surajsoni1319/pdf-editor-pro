@@ -568,8 +568,9 @@ elif feature == "💧 Add Watermark":
             "⬇️ Download Final Watermarked PDF"
         )
 
-
-# Feature 6: Extract Text (With OCR Support)
+# ======================================================
+# Feature 6: Extract Text (With OCR Support) – FINAL SAFE
+# ======================================================
 elif feature == "📝 Extract Text":
     st.header("📝 Extract Text from PDF")
     st.write("Extract text from digital or scanned PDFs using OCR if required.")
@@ -595,9 +596,9 @@ elif feature == "📝 Extract Text":
             try:
                 extracted_text = ""
 
-                # ===============================
-                # NORMAL TEXT EXTRACTION
-                # ===============================
+                # -------------------------------
+                # TEXT EXTRACTION
+                # -------------------------------
                 if extract_method == "Normal (Text-based PDF)":
                     reader = PyPDF2.PdfReader(uploaded_file)
                     for page in reader.pages:
@@ -605,9 +606,6 @@ elif feature == "📝 Extract Text":
                         if txt:
                             extracted_text += txt + "\n"
 
-                # ===============================
-                # OCR EXTRACTION
-                # ===============================
                 else:
                     images = convert_from_bytes(uploaded_file.getvalue(), dpi=300)
                     for img in images:
@@ -620,7 +618,7 @@ elif feature == "📝 Extract Text":
                 st.success("✅ Text extraction completed!")
 
                 # ======================================================
-                # DOCUMENT → TXT
+                # DOCUMENT MODE
                 # ======================================================
                 if doc_type == "📄 Document":
                     st.text_area("📖 Extracted Text", extracted_text, height=400)
@@ -633,7 +631,7 @@ elif feature == "📝 Extract Text":
                     )
 
                 # ======================================================
-                # INVOICE / BILL → SAFE SMART EXTRACTION
+                # INVOICE MODE (100% SAFE)
                 # ======================================================
                 else:
                     import re
@@ -642,126 +640,122 @@ elif feature == "📝 Extract Text":
 
                     lines = [l.strip() for l in extracted_text.split("\n") if l.strip()]
 
-                    # -------------------------------------------------
-                    # SAFE HELPERS (NO INDEX ERRORS)
-                    # -------------------------------------------------
-                    def safe_next_line(keyword):
-                        for i, l in enumerate(lines):
-                            if keyword in l.upper():
-                                if i + 1 < len(lines):
-                                    return lines[i + 1].replace(":", "").strip()
-                        return ""
+                    # -------------------------------
+                    # HEADER EXTRACTION (NO INDEXING)
+                    # -------------------------------
+                    header = {}
 
-                    def safe_find_group(pattern):
-                        for l in lines:
-                            m = re.search(pattern, l, re.IGNORECASE)
-                            if m:
-                                return m.group(1)
-                        return ""
+                    for line in lines:
+                        u = line.upper()
 
-                    def safe_find_line(pattern):
-                        for l in lines:
-                            if re.search(pattern, l, re.IGNORECASE):
-                                return l
-                        return ""
+                        if "INVOICE NO" in u and "Invoice Number" not in header:
+                            header["Invoice Number"] = line.split(":")[-1].strip()
 
-                    # -------------------------------------------------
-                    # INVOICE HEADER (CRASH-PROOF)
-                    # -------------------------------------------------
-                    invoice_header = {
-                        "Invoice Number": safe_next_line("INVOICE NO"),
-                        "Invoice Date": safe_next_line("INVOICE DATE"),
-                        "IRN Number": safe_find_group(r"IRN\s*NO[:\s]*([A-Z0-9\-]+)"),
-                        "E-Way Bill No": safe_find_group(r"EWAY\s*BILL\s*NO[:\s]*(\d+)"),
-                        "Seller GSTIN": safe_find_group(
-                            r"\b\d{2}[A-Z]{5}\d{4}[A-Z]\dZ[A-Z0-9]\b"
-                        ),
-                        "Vehicle Number": safe_find_group(
-                            r"[A-Z]{2}\d{2}[A-Z]{1,2}\d{4}"
-                        ),
-                        "Total Invoice Value": safe_find_group(
-                            r"TOTAL[:\s]*([\d,]+\.\d{2})"
-                        ),
-                        "Invoice Value (Words)": safe_find_line(
-                            r"RUPEES.*ONLY"
-                        ),
-                    }
+                        elif "INVOICE DATE" in u and "Invoice Date" not in header:
+                            header["Invoice Date"] = line.split(":")[-1].strip()
+
+                        elif "IRN" in u and "IRN Number" not in header:
+                            header["IRN Number"] = line.split(":")[-1].strip()
+
+                        elif "EWAY" in u and "E-Way Bill No" not in header:
+                            digits = re.findall(r"\d{6,}", line)
+                            if digits:
+                                header["E-Way Bill No"] = digits[0]
+
+                        elif "GSTIN" in u and "GSTIN" not in header:
+                            gst = re.findall(
+                                r"\b\d{2}[A-Z]{5}\d{4}[A-Z]\dZ[A-Z0-9]\b", line
+                            )
+                            if gst:
+                                header["GSTIN"] = gst[0]
+
+                        elif "VEHICLE" in u and "Vehicle Number" not in header:
+                            veh = re.findall(r"[A-Z]{2}\d{2}[A-Z]{1,2}\d{4}", line)
+                            if veh:
+                                header["Vehicle Number"] = veh[0]
+
+                        elif "TOTAL" in u and "Total Amount" not in header:
+                            amt = re.findall(r"[\d,]+\.\d{2}", line)
+                            if amt:
+                                header["Total Amount"] = amt[0]
+
+                        elif "RUPEES" in u and "Amount In Words" not in header:
+                            header["Amount In Words"] = line
 
                     header_df = pd.DataFrame(
-                        [{"Field": k, "Value": v} for k, v in invoice_header.items() if v]
+                        [{"Field": k, "Value": v} for k, v in header.items()]
                     )
 
                     st.markdown("### 🧾 Invoice Header")
                     st.dataframe(header_df, use_container_width=True)
 
-                    # -------------------------------------------------
-                    # LINE ITEMS (OCR-SAFE, VENDOR-AGNOSTIC)
-                    # -------------------------------------------------
-                    line_items = []
-                    current_item = {}
+                    # -------------------------------
+                    # LINE ITEMS (ABSOLUTELY SAFE)
+                    # -------------------------------
+                    items = []
+                    current = {}
 
                     for line in lines:
                         u = line.upper()
 
-                        # Item description detection
                         if (
                             u.isupper()
                             and len(u.split()) >= 2
-                            and not any(k in u for k in [
-                                "INVOICE", "TOTAL", "GST", "TAX", "DATE",
-                                "STATE", "CODE", "AMOUNT", "RATE"
-                            ])
+                            and not any(
+                                x in u for x in
+                                ["INVOICE", "TOTAL", "GST", "TAX", "DATE", "STATE"]
+                            )
                             and not re.search(r"\d{6,8}", u)
                         ):
-                            if current_item:
-                                line_items.append(current_item)
-                                current_item = {}
-                            current_item["Item Description"] = line
+                            if current:
+                                items.append(current)
+                                current = {}
+                            current["Item Description"] = line
 
-                        elif "HSN" in u:
+                        if "HSN" in u:
                             hsn = re.findall(r"\d{6,8}", u)
                             if hsn:
-                                current_item["HSN Code"] = hsn[0]
+                                current["HSN Code"] = hsn[0]
 
-                        elif "QTY" in u or "QUANTITY" in u:
+                        if "QTY" in u:
                             qty = re.findall(r"[\d.]+", u)
                             if qty:
-                                current_item["Quantity"] = qty[0]
+                                current["Quantity"] = qty[0]
 
-                        elif "RATE" in u:
+                        if "RATE" in u:
                             rate = re.findall(r"[\d.]+", u)
                             if rate:
-                                current_item["Basic Rate"] = rate[0]
+                                current["Rate"] = rate[0]
 
-                        elif "TAXABLE" in u:
-                            amt = re.findall(r"[\d,]+\.\d{2}", u)
-                            if amt:
-                                current_item["Taxable Amount"] = amt[0]
+                        if "TAXABLE" in u:
+                            tax = re.findall(r"[\d,]+\.\d{2}", u)
+                            if tax:
+                                current["Taxable Amount"] = tax[0]
 
-                    if current_item:
-                        line_items.append(current_item)
+                    if current:
+                        items.append(current)
 
-                    items_df = pd.DataFrame(line_items)
+                    items_df = pd.DataFrame(items)
 
                     st.markdown("### 📦 Line Items")
                     st.dataframe(items_df, use_container_width=True)
 
-                    # -------------------------------------------------
-                    # EXPORT TO EXCEL
-                    # -------------------------------------------------
-                    excel_buffer = io.BytesIO()
-                    with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
+                    # -------------------------------
+                    # EXPORT
+                    # -------------------------------
+                    buffer = io.BytesIO()
+                    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
                         header_df.to_excel(writer, "Invoice_Header", index=False)
                         items_df.to_excel(writer, "Line_Items", index=False)
                         pd.DataFrame(
                             {"Raw_Text": [extracted_text]}
                         ).to_excel(writer, "Raw_Text", index=False)
 
-                    excel_buffer.seek(0)
+                    buffer.seek(0)
 
                     st.download_button(
-                        "⬇️ Download Invoice Data (Excel)",
-                        excel_buffer,
+                        "⬇️ Download Invoice (Excel)",
+                        buffer,
                         "invoice_extracted_data.xlsx",
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True
@@ -1459,6 +1453,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
