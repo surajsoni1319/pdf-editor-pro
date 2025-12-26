@@ -3,4 +3,5 @@ PyPDF2
 Pillow
 reportlab
 pdf2image
+pytesseract
 img2pdf
