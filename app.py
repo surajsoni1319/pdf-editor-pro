@@ -576,9 +576,6 @@ elif feature == "📝 Extract Text":
     uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
 
     if uploaded_file:
-        # -------------------------------
-        # Step 1: User choices
-        # -------------------------------
         col1, col2 = st.columns(2)
 
         with col1:
@@ -602,26 +599,17 @@ elif feature == "📝 Extract Text":
                 # ===============================
                 if extract_method == "Normal (Text-based PDF)":
                     reader = PyPDF2.PdfReader(uploaded_file)
-
-                    with st.spinner("Extracting text from PDF..."):
-                        for page in reader.pages:
-                            page_text = page.extract_text()
-                            if page_text:
-                                extracted_text += page_text + "\n\n"
+                    for page in reader.pages:
+                        if page.extract_text():
+                            extracted_text += page.extract_text() + "\n"
 
                 # ===============================
                 # OCR EXTRACTION
                 # ===============================
                 else:
-                    with st.spinner("Running OCR on scanned PDF..."):
-                        images = convert_from_bytes(
-                            uploaded_file.getvalue(),
-                            dpi=300
-                        )
-
-                        for img in images:
-                            text = pytesseract.image_to_string(img)
-                            extracted_text += text + "\n\n"
+                    images = convert_from_bytes(uploaded_file.getvalue(), dpi=300)
+                    for img in images:
+                        extracted_text += pytesseract.image_to_string(img) + "\n"
 
                 if not extracted_text.strip():
                     st.warning("⚠️ No text could be extracted.")
@@ -633,17 +621,12 @@ elif feature == "📝 Extract Text":
                 # DOCUMENT → TXT
                 # ======================================================
                 if doc_type == "📄 Document":
-                    st.text_area(
-                        "📖 Extracted Text",
-                        extracted_text,
-                        height=400
-                    )
-
+                    st.text_area("📖 Extracted Text", extracted_text, height=400)
                     st.download_button(
-                        label="⬇️ Download as TXT",
-                        data=extracted_text,
-                        file_name="extracted_text.txt",
-                        mime="text/plain",
+                        "⬇️ Download as TXT",
+                        extracted_text,
+                        "extracted_text.txt",
+                        "text/plain",
                         use_container_width=True
                     )
 
@@ -652,188 +635,123 @@ elif feature == "📝 Extract Text":
                 # ======================================================
                 else:
                     import re
-                    
-                    st.markdown("### 📊 Extracted Invoice Data")
-                    
-                    text = extracted_text
-                    
-                    # -------------------------------------------------
-                    # Helper function for flexible pattern matching
-                    # -------------------------------------------------
-                    def find(pattern, text, default=""):
-                        match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
-                        return match.group(1).strip() if match else default
-                    
-                    def find_all(pattern, text):
-                        return re.findall(pattern, text, re.IGNORECASE | re.DOTALL)
-                    
-                    # -------------------------------------------------
-                    # COMPREHENSIVE INVOICE HEADER EXTRACTION
-                    # -------------------------------------------------
-                    invoice_data = {}
-                    
-                    # Basic Invoice Info
-                    invoice_data["Invoice Number"] = find(r"Invoice\s+No[:\s]*([A-Z0-9\-]+)", text)
-                    invoice_data["Invoice Date"] = find(r"Invoice\s+Date[:\s]*([\d/\-]+)", text)
-                    invoice_data["Due Date"] = find(r"Due\s+Date[:\s]*([\d/\-]+)", text)
-                    invoice_data["CIN Number"] = find(r"CIN\s+NO[\.:\s]*([A-Z0-9]+)", text)
-                    invoice_data["IRN Number"] = find(r"IRN\s+No[:\s]*([A-Za-z0-9\-]+)", text)
-                    
-                    # E-Way Bill Info
-                    invoice_data["EWAY Bill No"] = find(r"EWAY\s+Bill\s+No[:\s]*(\d+)", text)
-                    invoice_data["EWB Expiry Date"] = find(r"EWB\s+Expiry\s+Date[/Time:\s]*([\d/\.\s:]+)", text)
-                    
-                    # Sales Order Info
-                    invoice_data["Sales Order No"] = find(r"S\.?O\.?\s+No[\.:\s&]*(\d+)", text)
-                    invoice_data["Sales Order Date"] = find(r"S\.?O\.?\s+No[^&]*&\s*([\d/]+)", text)
-                    invoice_data["Customer PO No"] = find(r"CustPO\s+No[\.:\s]*(\d+)", text)
-                    invoice_data["Our Ref No"] = find(r"Our\s+Ref[\.:\s]*No[\.:\s]*([A-Z0-9]+)", text)
-                    
-                    # Delivery Info
-                    invoice_data["Delivery No"] = find(r"Delivery\s+No[\.:\s&]*(\d+)", text)
-                    invoice_data["Delivery Date"] = find(r"Delivery\s+No[^&]*&\s*([\d/]+)", text)
-                    invoice_data["Shipment No"] = find(r"Shipment\s+No[\.:\s&]*(\d+)", text)
-                    invoice_data["Shipment Date"] = find(r"Shipment\s+No[^&]*&\s*([\d/]+)", text)
-                    
-                    # Seller/Company Info (Billed From)
-                    invoice_data["Seller Name"] = find(r"(STAR\s+CEMENT\s+LIMITED)", text)
-                    invoice_data["Seller Location"] = find(r"VILLAGE\s*&\s*PO[:\s\-]*([\w\s,\.]+?)(?:GSTIN|PIN|STATE)", text)
-                    invoice_data["Seller GSTIN"] = find(r"GSTIN\s+No[\.:\s]*([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9]{1}[A-Z]{1}[0-9]{1})", text)
-                    invoice_data["Seller PIN"] = find(r"PIN\s+No[\.:\s]*(\d{6})", text)
-                    invoice_data["Seller State Code"] = find(r"STATE\s+CODE[:\s]*(\d+)", text)
-                    invoice_data["Seller State"] = find(r"STATE\s+CODE[:\d\s]*([A-Z\s]+?)(?:\n|S\.O\.|Name)", text)
-                    
-                    # Customer Info (Billed To)
-                    invoice_data["Customer Name"] = find(r"Name\s*&\s*Addr[^\n]*Customer[^\n]*:\s*([^\n]+)", text)
-                    invoice_data["Customer Location"] = find(r"Billed\s+To[^\n]*:\s*[^\n]+\s*([^\n]+?)(?:GSTIN|PIN|Invoice)", text)
-                    customer_gstin_match = find_all(r"GSTIN\s+No[\.:\s]*([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9]{1}[A-Z]{1}[0-9]{1})", text)
-                    invoice_data["Customer GSTIN"] = customer_gstin_match[1] if len(customer_gstin_match) > 1 else ""
-                    
-                    # Delivery Address (Ship To)
-                    invoice_data["Delivery Address"] = find(r"Delivery\s+Address[^\n]*Ship\s+To[^\n]*:\s*([^\n]+)", text)
-                    invoice_data["Delivery Location"] = find(r"Ship\s+To[^\n]*:[^\n]+\s*([^\n]+?)(?:PIN|GSTIN|\d{6})", text)
-                    delivery_pin = find_all(r"PIN\s+No[\.:\s]*(\d{6})", text)
-                    invoice_data["Delivery PIN"] = delivery_pin[1] if len(delivery_pin) > 1 else ""
-                    
-                    state_codes = find_all(r"STATE\s+CODE[:\s]*(\d+)", text)
-                    invoice_data["Delivery State Code"] = state_codes[1] if len(state_codes) > 1 else ""
-                    states = find_all(r"STATE\s+CODE[:\d\s]*([A-Z\s]+?)(?:\n|SI|Description)", text)
-                    invoice_data["Delivery State"] = states[1] if len(states) > 1 else ""
-                    
-                    # Transport Details
-                    invoice_data["Mode of Transport"] = find(r"Mode\s+of\s+Transport[:\s]*([A-Z]+)", text)
-                    invoice_data["Transporter Code"] = find(r"Transporter\s+Code[:\s&]*(\d+)", text)
-                    invoice_data["Transporter Name"] = find(r"Transporter\s+Code[^:&]*&\s*Name[:\s]*([\w\s]+?)(?:\n|Vehicle)", text)
-                    invoice_data["Vehicle Number"] = find(r"Vehicle\s+Reg[\.:\s]*No[\.:\s]*([A-Z0-9]+)", text)
-                    invoice_data["LR/RR No"] = find(r"L\.?R[\.:/]*R\.?R[\.:\s]*No[\.:\s&]*(\d+)", text)
-                    invoice_data["LR/RR Date"] = find(r"L\.?R[\.:/]*R\.?R[\.:\s]*No[^&]*&\s*Date[:\s]*([\d/]+)", text)
-                    invoice_data["Route Name"] = find(r"Route\s+Name[:\s]*([\w\s]+?)(?:\n|Incoterms)", text)
-                    invoice_data["Incoterms"] = find(r"Incoterms[:\s]*([\w\s]+?)(?:\n|Terms)", text)
-                    invoice_data["Destination"] = find(r"Destination[:\s]*([\w\s]+?)(?:\n|Batch)", text)
-                    invoice_data["Batch No"] = find(r"Batch\s+No[\.:\s]*([A-Z0-9]+)", text)
-                    
-                    # Financial Details
-                    invoice_data["Taxable Amount"] = find(r"Taxable\s+Amt[,\.:\s]*([\d,]+\.?\d*)", text)
-                    invoice_data["CGST"] = find(r"CGST[:\s]*([\d,]+\.?\d*)", text)
-                    invoice_data["SGST"] = find(r"SGST[:\s]*([\d,]+\.?\d*)", text)
-                    invoice_data["IGST Rate"] = find(r"IGST[:\s@]*(\d+\.?\d*)%", text)
-                    invoice_data["IGST Amount"] = find(r"IGST[:\s]*([\d,]+\.?\d*)", text)
-                    invoice_data["TCS"] = find(r"TCS[:\-\s]*([\d,]+\.?\d*)", text)
-                    invoice_data["Round Off"] = find(r"R/?OFF[:\s\-•]*([\d,\.]+)", text)
-                    invoice_data["Total Invoice Value"] = find(r"TOTAL[:\s]*([\d,]+\.?\d*)", text)
-                    invoice_data["Invoice Value in Words"] = find(r"Total\s+Invoice\s+value\s+[Ii]n\s+words[:\s]*(.*?ONLY)", text)
-                    
-                    # Additional Info
-                    invoice_data["Freight"] = find(r"FREIGHT[:\-\s]*([\d,]+\.?\d*)", text)
-                    invoice_data["Reverse Charge"] = find(r"Reverse\s+Charge[:\s]*(YES|NO)", text)
-                    invoice_data["POD"] = find(r"POD[:\s]*([\w\s]+?)(?:\n|L\.R)", text)
-                    invoice_data["Payment Terms"] = find(r"Payment\s+to\s+be\s+made[:\s]*(.*?)(?:Total|www)", text)
-                    
-                    # Contact Info
-                    guwahati_off = find(r"Guwahati\s+Off[:\s]*(.*?)(?:Kolkata|SUBJECT)", text)
-                    kolkata_off = find(r"Kolkata\s+Off[:\s]*(.*?)(?:SUBJECT|\n\n)", text)
-                    invoice_data["Guwahati Office"] = guwahati_off
-                    invoice_data["Kolkata Office"] = kolkata_off
-                    invoice_data["Jurisdiction"] = find(r"SUBJECT\s+TO\s+([\w\s]+)\s+JURISDICTION", text)
-                    
-                    # -------------------------------------------------
-                    # LINE ITEMS EXTRACTION
-                    # -------------------------------------------------
-                    line_items = []
-                    
-                    # Pattern for item extraction (more flexible)
-                    item_pattern = re.compile(
-                        r"(?P<description>CEMENT[^\n]*?)\s+"
-                        r"(?P<hsn>\d{6,8})\s+"
-                        r"(?P<package>[A-Z]+)\s+"
-                        r"(?P<bags>[\d,]*)\s+"
-                        r"(?P<uom>[A-Z]{2})\s+"
-                        r"(?P<qty>[\d,.]+)\s+"
-                        r"(?P<rate>[\d,.]+)",
-                        re.IGNORECASE
+                    import pandas as pd
+                    import io
+
+                    lines = [l.strip() for l in extracted_text.split("\n") if l.strip()]
+
+                    # ---------------- HEADER EXTRACTION ----------------
+                    def get_next_value(keyword):
+                        for i, l in enumerate(lines):
+                            if keyword in l.upper():
+                                if i + 1 < len(lines):
+                                    return lines[i + 1].replace(":", "").strip()
+                        return ""
+
+                    invoice_header = {
+                        "Invoice Number": get_next_value("INVOICE NO"),
+                        "Invoice Date": get_next_value("INVOICE DATE"),
+                        "IRN Number": get_next_value("IRN"),
+                        "E-Way Bill No": get_next_value("EWAY"),
+                        "Seller GSTIN": next(
+                            (re.findall(r"\b\d{2}[A-Z]{5}\d{4}[A-Z]\dZ[A-Z0-9]\b", l)[0]
+                             for l in lines if re.findall(r"\b\d{2}[A-Z]{5}\d{4}[A-Z]\dZ[A-Z0-9]\b", l)),
+                            ""
+                        ),
+                        "Vehicle Number": next(
+                            (re.findall(r"[A-Z]{2}\d{2}[A-Z]{1,2}\d{4}", l)[0]
+                             for l in lines if "VEHICLE" in l.upper()),
+                            ""
+                        ),
+                        "Total Invoice Value": next(
+                            (re.findall(r"[\d,]+\.\d{2}", l)[0]
+                             for l in lines if "TOTAL" in l.upper()),
+                            ""
+                        ),
+                        "Invoice Value (Words)": next(
+                            (l for l in lines if "RUPEES" in l.upper()),
+                            ""
+                        ),
+                    }
+
+                    header_df = pd.DataFrame(
+                        invoice_header.items(),
+                        columns=["Field", "Value"]
                     )
-                    
-                    for match in item_pattern.finditer(text):
-                        line_items.append({
-                            "Item Description": match.group("description").strip(),
-                            "HSN Code": match.group("hsn"),
-                            "Package Type": match.group("package"),
-                            "No of Bags": match.group("bags"),
-                            "UOM": match.group("uom"),
-                            "Quantity": match.group("qty"),
-                            "Basic Rate": match.group("rate"),
-                        })
-                    
-                    # -------------------------------------------------
-                    # DISPLAY EXTRACTED DATA
-                    # -------------------------------------------------
-                    # Create DataFrame from invoice data
-                    header_df = pd.DataFrame([
-                        {"Field": k, "Value": v} 
-                        for k, v in invoice_data.items() 
-                        if v  # Only include non-empty values
-                    ])
-                    
-                    st.markdown("### 🧾 Invoice Header Information")
+
+                    st.markdown("### 🧾 Invoice Header")
                     st.dataframe(header_df, use_container_width=True)
-                    
-                    # Display Line Items
-                    if line_items:
-                        st.markdown("### 📦 Line Items")
-                        items_df = pd.DataFrame(line_items)
-                        st.dataframe(items_df, use_container_width=True)
-                    else:
-                        st.info("ℹ️ No line items detected in standard format")
-                    
-                    # -------------------------------------------------
-                    # EXPORT TO EXCEL
-                    # -------------------------------------------------
+
+                    # ---------------- LINE ITEMS (GENERIC, OCR SAFE) ----------------
+                    line_items = []
+                    current_item = {}
+
+                    for line in lines:
+                        u = line.upper()
+
+                        if (
+                            u.isupper()
+                            and len(u.split()) >= 2
+                            and not any(k in u for k in [
+                                "INVOICE", "TOTAL", "GST", "TAX", "DATE",
+                                "STATE", "CODE", "AMOUNT", "RATE"
+                            ])
+                            and not re.search(r"\d{6,8}", u)
+                        ):
+                            if current_item:
+                                line_items.append(current_item)
+                                current_item = {}
+                            current_item["Item Description"] = line
+
+                        elif "HSN" in u:
+                            hsn = re.findall(r"\d{6,8}", u)
+                            if hsn:
+                                current_item["HSN Code"] = hsn[0]
+
+                        elif "QTY" in u or "QUANTITY" in u:
+                            qty = re.findall(r"[\d.]+", u)
+                            if qty:
+                                current_item["Quantity"] = qty[0]
+
+                        elif "RATE" in u:
+                            rate = re.findall(r"[\d.]+", u)
+                            if rate:
+                                current_item["Basic Rate"] = rate[0]
+
+                        elif "TAXABLE" in u:
+                            amt = re.findall(r"[\d,]+\.\d{2}", u)
+                            if amt:
+                                current_item["Taxable Amount"] = amt[0]
+
+                    if current_item:
+                        line_items.append(current_item)
+
+                    items_df = pd.DataFrame(line_items)
+
+                    st.markdown("### 📦 Line Items")
+                    st.dataframe(items_df, use_container_width=True)
+
+                    # ---------------- EXPORT TO EXCEL ----------------
                     excel_buffer = io.BytesIO()
-                    
                     with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
-                        header_df.to_excel(writer, sheet_name="Invoice_Header", index=False)
-                        
-                        if line_items:
-                            items_df.to_excel(writer, sheet_name="Line_Items", index=False)
-                        
-                        # Also add raw text for reference
-                        raw_df = pd.DataFrame({"Extracted_Text": [extracted_text]})
-                        raw_df.to_excel(writer, sheet_name="Raw_Text", index=False)
-                    
+                        header_df.to_excel(writer, "Invoice_Header", index=False)
+                        items_df.to_excel(writer, "Line_Items", index=False)
+                        pd.DataFrame({"Raw_Text": [extracted_text]}).to_excel(
+                            writer, "Raw_Text", index=False
+                        )
+
                     excel_buffer.seek(0)
-                    
+
                     st.download_button(
-                        label="⬇️ Download Invoice Data (Excel)",
-                        data=excel_buffer,
-                        file_name="invoice_extracted_data.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        "⬇️ Download Invoice Data (Excel)",
+                        excel_buffer,
+                        "invoice_extracted_data.xlsx",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True
                     )
 
             except Exception as e:
                 st.error(f"❌ Error during extraction: {str(e)}")
-                import traceback
-                st.text_area("Error Details", traceback.format_exc(), height=200)
 
 
 
@@ -1525,6 +1443,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
