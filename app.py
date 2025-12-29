@@ -1935,6 +1935,10 @@ elif feature == "🔀 Reorder Pages":
 # ======================================================
 # Feature: Add Signature to PDF
 # ======================================================
+
+# ======================================================
+# Feature: Add Signature to PDF (PIL-only, Cloud Safe)
+# ======================================================
 elif feature == "✍️ Sign PDF":
 
     st.header("✍️ Sign PDF")
@@ -1943,28 +1947,43 @@ elif feature == "✍️ Sign PDF":
     from pypdf import PdfReader, PdfWriter
     from reportlab.pdfgen import canvas
     from reportlab.lib.pagesizes import letter
-    from pdf2image import convert_from_bytes
     from PIL import Image
-    from rembg import remove
+    import numpy as np
     import io
     import tempfile
 
     # -----------------------------
-    # Upload PDF
+    # Background removal (PIL only)
     # -----------------------------
-    pdf_file = st.file_uploader("Upload PDF", type=["pdf"])
-    sig_file = st.file_uploader("Upload Signature Image (JPG / PNG)", type=["png", "jpg", "jpeg"])
+    def remove_signature_background(sig_image: Image.Image) -> Image.Image:
+        sig = sig_image.convert("RGBA")
+        data = np.array(sig)
+
+        r, g, b, a = data.T
+
+        # Detect near-white background
+        white_bg = (r > 230) & (g > 230) & (b > 230)
+
+        # Make background transparent
+        data[..., 3][white_bg] = 0
+
+        return Image.fromarray(data)
+
+    # -----------------------------
+    # Upload inputs
+    # -----------------------------
+    pdf_file = st.file_uploader("📄 Upload PDF", type=["pdf"])
+    sig_file = st.file_uploader("✍️ Upload Signature (PNG / JPG)", type=["png", "jpg", "jpeg"])
 
     if pdf_file and sig_file:
 
         # -----------------------------
-        # Signature background removal
+        # Process signature
         # -----------------------------
-        sig_image = Image.open(sig_file).convert("RGBA")
-        sig_no_bg = remove(sig_image)  # removes background
-        sig_no_bg = Image.fromarray(sig_no_bg)
+        sig_image = Image.open(sig_file)
+        sig_no_bg = remove_signature_background(sig_image)
 
-        st.subheader("🖋️ Signature Preview (Background Removed)")
+        st.subheader("🖋️ Signature Preview")
         st.image(sig_no_bg, width=250)
 
         # -----------------------------
@@ -1973,9 +1992,6 @@ elif feature == "✍️ Sign PDF":
         reader = PdfReader(pdf_file)
         total_pages = len(reader.pages)
 
-        # -----------------------------
-        # User controls
-        # -----------------------------
         st.subheader("📍 Signature Placement")
 
         page_number = st.number_input(
@@ -2002,18 +2018,18 @@ elif feature == "✍️ Sign PDF":
         )
 
         # -----------------------------
-        # Sign button
+        # Apply signature
         # -----------------------------
         if st.button("✍️ Apply Signature", use_container_width=True):
 
             writer = PdfWriter()
 
             for i, page in enumerate(reader.pages):
+
                 if i == page_number - 1:
                     packet = io.BytesIO()
                     can = canvas.Canvas(packet, pagesize=letter)
 
-                    # Save signature temp
                     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
                         sig_resized.save(tmp.name)
                         can.drawImage(
@@ -2031,7 +2047,6 @@ elif feature == "✍️ Sign PDF":
 
                 writer.add_page(page)
 
-            # Output signed PDF
             output = io.BytesIO()
             writer.write(output)
             output.seek(0)
@@ -2046,6 +2061,8 @@ elif feature == "✍️ Sign PDF":
                 use_container_width=True
             )
 
+#######################################################################
+
 
 # Footer
 st.markdown("---")
@@ -2056,6 +2073,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
