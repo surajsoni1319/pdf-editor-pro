@@ -1953,11 +1953,14 @@ elif feature == "✍️ Sign PDF (Click to Place)":
     import numpy as np
     import io
     import tempfile
+    import base64
+    import os
 
     # --------------------------------------------------
     # Background removal (PIL-only, safe)
     # --------------------------------------------------
-    def remove_signature_background(sig_image: Image.Image) -> Image.Image:
+    def remove_signature_background(sig_image: Image.Image, threshold: int = 230) -> Image.Image:
+        """Remove white background from signature image"""
         sig = sig_image.convert("RGBA")
         data = np.array(sig)
 
@@ -1965,7 +1968,7 @@ elif feature == "✍️ Sign PDF (Click to Place)":
         g = data[:, :, 1]
         b = data[:, :, 2]
 
-        white_bg = (r > 230) & (g > 230) & (b > 230)
+        white_bg = (r > threshold) & (g > threshold) & (b > threshold)
         data[white_bg, 3] = 0
 
         return Image.fromarray(data)
@@ -1977,120 +1980,168 @@ elif feature == "✍️ Sign PDF (Click to Place)":
     sig_file = st.file_uploader("✍️ Upload Signature (PNG / JPG)", type=["png", "jpg", "jpeg"])
 
     if pdf_file and sig_file:
+        try:
+            # Process signature
+            sig_image = Image.open(sig_file)
+            sig_no_bg = remove_signature_background(sig_image)
 
-        # Process signature
-        sig_image = Image.open(sig_file)
-        sig_no_bg = remove_signature_background(sig_image)
+            st.subheader("🖋️ Signature Preview")
+            st.image(sig_no_bg, width=200)
 
-        st.subheader("🖋️ Signature Preview")
-        st.image(sig_no_bg, width=200)
+            # Convert PDF first page to image
+            images = convert_from_bytes(pdf_file.getvalue(), dpi=150)
+            page_image = images[0]
 
-        # Convert PDF first page to image
-        images = convert_from_bytes(pdf_file.getvalue(), dpi=150)
-        page_image = images[0]
+            img_width, img_height = page_image.size
 
-        img_width, img_height = page_image.size
+            # Convert image to base64 for display
+            img_buffer = io.BytesIO()
+            page_image.save(img_buffer, format='PNG')
+            img_b64 = base64.b64encode(img_buffer.getvalue()).decode()
 
-        # Display page & capture click
-        st.subheader("📍 Click on the page to place signature")
+            # Display page & capture click
+            st.subheader("📍 Click on the page to place signature")
 
-        html = f"""
-        <html>
-        <body>
-        <img id="pdfPage" src="data:image/png;base64,{page_image.tobytes().hex()}" 
-             style="max-width:100%; cursor:crosshair;"
-             onclick="sendCoords(event)" />
-        <script>
-        function sendCoords(e) {{
-            const rect = e.target.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            window.parent.postMessage({{
-                x: x,
-                y: y,
-                width: rect.width,
-                height: rect.height
-            }}, "*");
-        }}
-        </script>
-        </body>
-        </html>
-        """
+            html = f"""
+            <html>
+            <body>
+            <img id="pdfPage" src="data:image/png;base64,{img_b64}" 
+                 style="max-width:100%; cursor:crosshair; border: 2px solid #ddd;"
+                 onclick="sendCoords(event)" />
+            <script>
+            function sendCoords(e) {{
+                const rect = e.target.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                const data = {{
+                    x: x,
+                    y: y,
+                    width: rect.width,
+                    height: rect.height
+                }};
+                
+                // Send to Streamlit
+                window.parent.postMessage(data, "*");
+            }}
+            
+            // Listen for messages from parent
+            window.addEventListener("message", function(event) {{
+                if (event.data.type === "streamlit:render") {{
+                    // Component is ready
+                }}
+            }});
+            </script>
+            </body>
+            </html>
+            """
 
-        coords = components.html(html, height=img_height + 50)
+            # Capture click coordinates
+            coords = components.html(html, height=int(img_height * 0.7) + 50)
+            
+            # Store coordinates in session state
+            if coords and isinstance(coords, dict) and "x" in coords:
+                st.session_state["click_coords"] = coords
+                st.rerun()
 
-        # Read click coordinates
-        click = st.session_state.get("click_coords")
+            # Read click coordinates from session state
+            click = st.session_state.get("click_coords")
 
-        if click:
-            st.success(f"📍 Clicked at X={int(click['x'])}, Y={int(click['y'])}")
+            if click:
+                st.success(f"📍 Clicked at X={int(click['x'])}, Y={int(click['y'])}")
 
-            scale = st.slider("Signature Size", 50, 300, 150)
+                # Signature size control
+                scale = st.slider("Signature Size (%)", 50, 300, 150)
 
-            if st.button("✍️ Apply Signature", use_container_width=True):
+                # Option to apply to all pages or just first page
+                apply_all = st.checkbox("Apply signature to all pages", value=False)
 
-                reader = PdfReader(pdf_file)
-                writer = PdfWriter()
+                if st.button("✍️ Apply Signature", type="primary", use_container_width=True):
+                    with st.spinner("Applying signature..."):
+                        try:
+                            # Read PDF
+                            reader = PdfReader(io.BytesIO(pdf_file.getvalue()))
+                            writer = PdfWriter()
 
-                pdf_width, pdf_height = letter
+                            # Get actual PDF dimensions from first page
+                            first_page = reader.pages[0]
+                            pdf_width = float(first_page.mediabox.width)
+                            pdf_height = float(first_page.mediabox.height)
 
-                # Convert image coords → PDF coords
-                x_pdf = (click["x"] / click["width"]) * pdf_width
-                y_pdf = pdf_height - ((click["y"] / click["height"]) * pdf_height)
+                            # Convert image coords → PDF coords
+                            x_pdf = (click["x"] / click["width"]) * pdf_width
+                            y_pdf = pdf_height - ((click["y"] / click["height"]) * pdf_height)
 
-                sig_resized = sig_no_bg.resize(
-                    (
-                        int(sig_no_bg.width * scale / 200),
-                        int(sig_no_bg.height * scale / 200)
-                    )
-                )
+                            # Resize signature
+                            sig_resized = sig_no_bg.resize(
+                                (
+                                    int(sig_no_bg.width * scale / 100),
+                                    int(sig_no_bg.height * scale / 100)
+                                ),
+                                Image.Resampling.LANCZOS
+                            )
 
-                for i, page in enumerate(reader.pages):
+                            # Process each page
+                            for i, page in enumerate(reader.pages):
+                                # Apply signature to first page or all pages based on checkbox
+                                if i == 0 or apply_all:
+                                    packet = io.BytesIO()
+                                    can = canvas.Canvas(packet, pagesize=(pdf_width, pdf_height))
 
-                    if i == 0:
-                        packet = io.BytesIO()
-                        can = canvas.Canvas(packet, pagesize=letter)
+                                    # Save signature to temp file
+                                    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                                        tmp_path = tmp.name
+                                        sig_resized.save(tmp_path)
+                                    
+                                    try:
+                                        # Draw signature on canvas
+                                        can.drawImage(
+                                            tmp_path, 
+                                            x_pdf, 
+                                            y_pdf - sig_resized.height,  # Adjust for image height
+                                            width=sig_resized.width,
+                                            height=sig_resized.height,
+                                            mask="auto"
+                                        )
+                                        can.save()
+                                    finally:
+                                        # Clean up temp file
+                                        os.unlink(tmp_path)
 
-                        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                            sig_resized.save(tmp.name)
-                            can.drawImage(tmp.name, x_pdf, y_pdf, mask="auto")
+                                    # Merge signature overlay with page
+                                    packet.seek(0)
+                                    overlay = PdfReader(packet)
+                                    page.merge_page(overlay.pages[0])
 
-                        can.save()
-                        packet.seek(0)
+                                writer.add_page(page)
 
-                        overlay = PdfReader(packet)
-                        page.merge_page(overlay.pages[0])
+                            # Write output
+                            output = io.BytesIO()
+                            writer.write(output)
+                            output.seek(0)
 
-                    writer.add_page(page)
+                            st.success("✅ Signature placed successfully!")
 
-                output = io.BytesIO()
-                writer.write(output)
-                output.seek(0)
+                            # Download button
+                            st.download_button(
+                                "⬇️ Download Signed PDF",
+                                output,
+                                "signed_document.pdf",
+                                "application/pdf",
+                                use_container_width=True
+                            )
+                            
+                            # Clear coordinates after successful signing
+                            if st.button("🔄 Sign Another Location"):
+                                del st.session_state["click_coords"]
+                                st.rerun()
 
-                st.success("✅ Signature placed successfully!")
+                        except Exception as e:
+                            st.error(f"❌ Error applying signature: {str(e)}")
 
-                st.download_button(
-                    "⬇️ Download Signed PDF",
-                    output,
-                    "signed_document.pdf",
-                    "application/pdf",
-                    use_container_width=True
-                )
-
-    # --------------------------------------------------
-    # JS listener (GLOBAL)
-    # --------------------------------------------------
-    components.html("""
-    <script>
-    window.addEventListener("message", function(e) {
-        if (e.data.x !== undefined) {
-            Streamlit.setComponentValue(e.data);
-        }
-    });
-    </script>
-    """, height=0)
-
-
+        except Exception as e:
+            st.error(f"❌ Error processing files: {str(e)}")
+            st.info("Please make sure you've uploaded valid PDF and image files.")
 
 
 #######################################################################
@@ -2105,6 +2156,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
