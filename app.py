@@ -92,7 +92,8 @@ feature = st.sidebar.radio(
         "🗜️ Compress PDF",
         "📸 PDF to Images",
         "✨ Highlight Text",
-        "🔀 Reorder Pages"
+        "🔀 Reorder Pages",
+        "✍️ Sign PDF"
 
     ]
 )
@@ -1931,6 +1932,121 @@ elif feature == "🔀 Reorder Pages":
         )
 
 
+# ======================================================
+# Feature: Add Signature to PDF
+# ======================================================
+elif feature == "✍️ Sign PDF":
+
+    st.header("✍️ Sign PDF")
+    st.write("Upload a PDF, add your signature, and download the signed document.")
+
+    from pypdf import PdfReader, PdfWriter
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import letter
+    from pdf2image import convert_from_bytes
+    from PIL import Image
+    from rembg import remove
+    import io
+    import tempfile
+
+    # -----------------------------
+    # Upload PDF
+    # -----------------------------
+    pdf_file = st.file_uploader("Upload PDF", type=["pdf"])
+    sig_file = st.file_uploader("Upload Signature Image (JPG / PNG)", type=["png", "jpg", "jpeg"])
+
+    if pdf_file and sig_file:
+
+        # -----------------------------
+        # Signature background removal
+        # -----------------------------
+        sig_image = Image.open(sig_file).convert("RGBA")
+        sig_no_bg = remove(sig_image)  # removes background
+        sig_no_bg = Image.fromarray(sig_no_bg)
+
+        st.subheader("🖋️ Signature Preview (Background Removed)")
+        st.image(sig_no_bg, width=250)
+
+        # -----------------------------
+        # PDF info
+        # -----------------------------
+        reader = PdfReader(pdf_file)
+        total_pages = len(reader.pages)
+
+        # -----------------------------
+        # User controls
+        # -----------------------------
+        st.subheader("📍 Signature Placement")
+
+        page_number = st.number_input(
+            "Page number (starting from 1)",
+            min_value=1,
+            max_value=total_pages,
+            value=total_pages
+        )
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            x_pos = st.slider("X position", 0, 600, 350)
+        with col2:
+            y_pos = st.slider("Y position", 0, 800, 100)
+        with col3:
+            scale = st.slider("Signature size", 50, 300, 150)
+
+        # Resize signature
+        sig_resized = sig_no_bg.resize(
+            (
+                int(sig_no_bg.width * scale / 200),
+                int(sig_no_bg.height * scale / 200)
+            )
+        )
+
+        # -----------------------------
+        # Sign button
+        # -----------------------------
+        if st.button("✍️ Apply Signature", use_container_width=True):
+
+            writer = PdfWriter()
+
+            for i, page in enumerate(reader.pages):
+                if i == page_number - 1:
+                    packet = io.BytesIO()
+                    can = canvas.Canvas(packet, pagesize=letter)
+
+                    # Save signature temp
+                    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                        sig_resized.save(tmp.name)
+                        can.drawImage(
+                            tmp.name,
+                            x_pos,
+                            y_pos,
+                            mask="auto"
+                        )
+
+                    can.save()
+                    packet.seek(0)
+
+                    overlay_pdf = PdfReader(packet)
+                    page.merge_page(overlay_pdf.pages[0])
+
+                writer.add_page(page)
+
+            # Output signed PDF
+            output = io.BytesIO()
+            writer.write(output)
+            output.seek(0)
+
+            st.success("✅ Signature added successfully!")
+
+            st.download_button(
+                label="⬇️ Download Signed PDF",
+                data=output,
+                file_name="signed_document.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+
+
 # Footer
 st.markdown("---")
 st.markdown("""
@@ -1940,6 +2056,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
