@@ -568,9 +568,9 @@ elif feature == "💧 Add Watermark":
             "⬇️ Download Final Watermarked PDF"
         )
 
-
-# Feature OCR
-
+#=============================================
+# Feature 6: OCR
+#=============================================
 
 elif feature == "📝 Extract Text":
     st.header("📝 Extract Text from PDF")
@@ -1128,6 +1128,43 @@ elif feature == "📝 Extract Text":
                                 break
                     
                     # -------------------------------------------------
+                    # FALLBACK: Manual parsing for broken table layouts
+                    # -------------------------------------------------
+                    if not line_items:
+                        # Try to find HSN codes and reconstruct items
+                        hsn_codes = re.findall(r'\b(\d{8})\b', text)
+                        
+                        if hsn_codes:
+                            # Find all amounts that look like prices
+                            amounts = re.findall(r'([\d,]+\.\d{2})', text)
+                            
+                            # Find quantities with units
+                            qty_matches = re.findall(r'(\d+)\s+(PCS|MT|KG|TON)', text, re.IGNORECASE)
+                            
+                            # Try to match them up
+                            for i, hsn in enumerate(hsn_codes):
+                                if i < len(qty_matches) and i < len(amounts):
+                                    item = {
+                                        "Sl No": str(i + 1),
+                                        "HSN/SAC": hsn,
+                                        "Quantity": qty_matches[i][0],
+                                        "UOM": qty_matches[i][1],
+                                        "Amount": amounts[i] if i < len(amounts) else ""
+                                    }
+                                    
+                                    # Try to find description near HSN
+                                    hsn_pos = text.find(hsn)
+                                    if hsn_pos > 0:
+                                        # Look for MOTOR/CEMENT/etc before HSN
+                                        before_hsn = text[max(0, hsn_pos-200):hsn_pos]
+                                        desc_match = re.search(r'(MOTOR[^\n]{0,80}|CEMENT[^\n]{0,80}|CLINKER[^\n]{0,80})', before_hsn, re.IGNORECASE)
+                                        if desc_match:
+                                            item["Description"] = desc_match.group(1).strip()
+                                    
+                                    if len(item) >= 3:
+                                        line_items.append(item)
+                    
+                    # -------------------------------------------------
                     # DISPLAY EXTRACTED DATA
                     # -------------------------------------------------
                     # Remove empty values and create DataFrame
@@ -1188,6 +1225,7 @@ elif feature == "📝 Extract Text":
                 st.error(f"❌ Error during extraction: {str(e)}")
                 import traceback
                 st.text_area("Error Details", traceback.format_exc(), height=200)
+
 
 
 # ===============================
@@ -1902,6 +1940,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
