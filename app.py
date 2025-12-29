@@ -1935,6 +1935,9 @@ elif feature == "🔀 Reorder Pages":
 # ======================================================
 # Feature: Sign PDF 
 # ======================================================
+# ======================================================
+# PDF Signature Tool – Click to Place + Slider Fine Tune
+# ======================================================
 import streamlit as st
 from pypdf import PdfReader, PdfWriter
 from pdf2image import convert_from_bytes
@@ -1981,6 +1984,12 @@ def pil_to_base64(img: Image.Image) -> str:
     return base64.b64encode(buf.getvalue()).decode()
 
 # --------------------------------------------------
+# Session state init
+# --------------------------------------------------
+if "signature_click" not in st.session_state:
+    st.session_state.signature_click = None
+
+# --------------------------------------------------
 # Uploads
 # --------------------------------------------------
 col1, col2 = st.columns(2)
@@ -2016,9 +2025,9 @@ if pdf_file and sig_file:
     st.subheader("📄 Click on PDF to place signature")
 
     # --------------------------------------------------
-    # CLICK CAPTURE
+    # CLICK CAPTURE (HTML → JS → session_state)
     # --------------------------------------------------
-    click_data = components.html(
+    components.html(
         f"""
         <html>
         <body style="margin:0">
@@ -2028,12 +2037,16 @@ if pdf_file and sig_file:
           <script>
             function send(e) {{
               const r = e.target.getBoundingClientRect();
-              parent.postMessage({{
+              const data = {{
                 x: e.clientX - r.left,
                 y: e.clientY - r.top,
                 w: r.width,
                 h: r.height
-              }}, "*");
+              }};
+              window.parent.postMessage(
+                {{ type: "signature_click", payload: data }},
+                "*"
+              );
             }}
           </script>
         </body>
@@ -2042,28 +2055,39 @@ if pdf_file and sig_file:
         height=int(page_image.size[1] * 0.8),
     )
 
+    # JS listener (GLOBAL)
     components.html("""
     <script>
     window.addEventListener("message", (e) => {
-      if (e.data?.x !== undefined) {
-        Streamlit.setComponentValue(e.data);
+      if (e.data && e.data.type === "signature_click") {
+        window.Streamlit.setComponentValue(e.data.payload);
       }
     });
     </script>
     """, height=0)
 
     # --------------------------------------------------
-    # Convert click → slider values
+    # Handle click safely
     # --------------------------------------------------
-    if click_data:
-        st.success(f"📍 Clicked at X={int(click_data['x'])}, Y={int(click_data['y'])}")
-        st.session_state["x_percent"] = int((click_data["x"] / click_data["w"]) * 100)
-        st.session_state["y_percent"] = int((click_data["y"] / click_data["h"]) * 100)
+    click_payload = st.session_state.get("signature_click")
+
+    if isinstance(click_payload, dict):
+        st.success(
+            f"📍 Clicked at X={int(click_payload['x'])}, "
+            f"Y={int(click_payload['y'])}"
+        )
+
+        st.session_state["x_percent"] = int(
+            (click_payload["x"] / click_payload["w"]) * 100
+        )
+        st.session_state["y_percent"] = int(
+            (click_payload["y"] / click_payload["h"]) * 100
+        )
 
     st.divider()
     st.subheader("📍 Fine Tune Position & Size")
 
-    # Sliders (fine tune)
+    # Sliders
     x_percent = st.slider(
         "Horizontal Position (%)",
         0, 100,
@@ -2151,6 +2175,7 @@ if pdf_file and sig_file:
 else:
     st.info("👆 Upload a PDF and a signature image to get started.")
 
+
 #######################################################################
 
 
@@ -2163,6 +2188,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
