@@ -1935,185 +1935,235 @@ elif feature == "🔀 Reorder Pages":
 # ======================================================
 # Feature: Sign PDF 
 # ======================================================
-elif feature == "✍️ Sign PDF (Click to Place)":
+import streamlit as st
+from pypdf import PdfReader, PdfWriter
+from pdf2image import convert_from_bytes
+from reportlab.pdfgen import canvas
+from PIL import Image
+import numpy as np
+import io
+import tempfile
+import os
 
-    st.header("✍️ Sign PDF – Click to Place")
-    st.write("Use the coordinate inputs or click detection to place your signature.")
+# Page config
+st.set_page_config(
+    page_title="PDF Signature Tool",
+    page_icon="✍️",
+    layout="wide"
+)
 
-    from pypdf import PdfReader, PdfWriter
-    from pdf2image import convert_from_bytes
-    from reportlab.pdfgen import canvas
-    from PIL import Image
-    import numpy as np
-    import io
-    import tempfile
-    import base64
-    import os
+# Title
+st.title("✍️ PDF Signature Tool")
+st.write("Upload a PDF and your signature image, then position it using the sliders.")
 
-    # --------------------------------------------------
-    # Background removal
-    # --------------------------------------------------
-    def remove_signature_background(sig_image: Image.Image, threshold: int = 230) -> Image.Image:
-        """Remove white background from signature image"""
-        sig = sig_image.convert("RGBA")
-        data = np.array(sig)
+# --------------------------------------------------
+# Background removal
+# --------------------------------------------------
+def remove_signature_background(sig_image: Image.Image, threshold: int = 230) -> Image.Image:
+    """Remove white background from signature image"""
+    sig = sig_image.convert("RGBA")
+    data = np.array(sig)
 
-        r = data[:, :, 0]
-        g = data[:, :, 1]
-        b = data[:, :, 2]
+    r = data[:, :, 0]
+    g = data[:, :, 1]
+    b = data[:, :, 2]
 
-        white_bg = (r > threshold) & (g > threshold) & (b > threshold)
-        data[white_bg, 3] = 0
+    white_bg = (r > threshold) & (g > threshold) & (b > threshold)
+    data[white_bg, 3] = 0
 
-        return Image.fromarray(data)
+    return Image.fromarray(data)
 
-    # --------------------------------------------------
-    # Upload inputs
-    # --------------------------------------------------
-    pdf_file = st.file_uploader("📄 Upload PDF", type=["pdf"])
-    sig_file = st.file_uploader("✍️ Upload Signature (PNG / JPG)", type=["png", "jpg", "jpeg"])
+# --------------------------------------------------
+# File uploads
+# --------------------------------------------------
+col1, col2 = st.columns(2)
 
-    if pdf_file and sig_file:
-        try:
-            # Process signature
-            sig_image = Image.open(sig_file)
-            sig_no_bg = remove_signature_background(sig_image)
+with col1:
+    pdf_file = st.file_uploader("📄 Upload PDF", type=["pdf"], key="pdf")
+    
+with col2:
+    sig_file = st.file_uploader("✍️ Upload Signature (PNG/JPG)", type=["png", "jpg", "jpeg"], key="sig")
 
-            st.subheader("🖋️ Signature Preview")
-            st.image(sig_no_bg, width=200)
+# --------------------------------------------------
+# Main processing
+# --------------------------------------------------
+if pdf_file and sig_file:
+    try:
+        # Process signature
+        sig_image = Image.open(sig_file)
+        sig_no_bg = remove_signature_background(sig_image)
 
-            # Convert PDF first page to image
+        # Show signature preview
+        st.subheader("🖋️ Signature Preview")
+        col_prev1, col_prev2, col_prev3 = st.columns([1, 2, 1])
+        with col_prev2:
+            st.image(sig_no_bg, width=300, caption="Your signature (background removed)")
+
+        st.divider()
+
+        # Convert PDF first page to image for preview
+        with st.spinner("Loading PDF preview..."):
             images = convert_from_bytes(pdf_file.getvalue(), dpi=150)
             page_image = images[0]
 
-            img_width, img_height = page_image.size
+        # Get PDF dimensions
+        reader = PdfReader(io.BytesIO(pdf_file.getvalue()))
+        first_page = reader.pages[0]
+        pdf_width = float(first_page.mediabox.width)
+        pdf_height = float(first_page.mediabox.height)
+        total_pages = len(reader.pages)
 
-            # Display PDF preview
-            st.subheader("📄 PDF Preview (First Page)")
-            st.image(page_image, use_column_width=True, caption="First page of PDF")
+        # Display PDF preview
+        st.subheader("📄 PDF Preview")
+        st.image(page_image, use_column_width=True, caption=f"First page (Total: {total_pages} pages)")
+        
+        st.info(f"📐 PDF dimensions: {pdf_width:.1f} x {pdf_height:.1f} points")
 
-            # Get PDF dimensions
-            reader = PdfReader(io.BytesIO(pdf_file.getvalue()))
-            first_page = reader.pages[0]
-            pdf_width = float(first_page.mediabox.width)
-            pdf_height = float(first_page.mediabox.height)
+        st.divider()
 
-            st.info(f"📐 PDF dimensions: {pdf_width:.1f} x {pdf_height:.1f} points")
+        # Position controls
+        st.subheader("📍 Position & Size Settings")
+        
+        col_pos1, col_pos2 = st.columns(2)
+        with col_pos1:
+            x_percent = st.slider(
+                "Horizontal Position (%)", 
+                0, 100, 50, 
+                help="0% = left edge, 100% = right edge"
+            )
+        with col_pos2:
+            y_percent = st.slider(
+                "Vertical Position (%)", 
+                0, 100, 80,
+                help="0% = top edge, 100% = bottom edge"
+            )
 
-            # Position controls
-            st.subheader("📍 Position Signature")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                x_percent = st.slider("Horizontal Position (%)", 0, 100, 50, 
-                                     help="0% = left edge, 100% = right edge")
-            with col2:
-                y_percent = st.slider("Vertical Position (%)", 0, 100, 50,
-                                     help="0% = top edge, 100% = bottom edge")
+        # Signature size control
+        scale = st.slider("Signature Size (%)", 25, 300, 100, help="Adjust the size of your signature")
 
-            # Calculate PDF coordinates
-            x_pdf = (x_percent / 100) * pdf_width
-            y_pdf = pdf_height - ((y_percent / 100) * pdf_height)
+        # Calculate PDF coordinates
+        x_pdf = (x_percent / 100) * pdf_width
+        y_pdf = pdf_height - ((y_percent / 100) * pdf_height)
 
-            # Signature size control
-            scale = st.slider("Signature Size (%)", 25, 300, 100)
+        # Calculate signature dimensions
+        sig_width = int(sig_no_bg.width * scale / 100)
+        sig_height = int(sig_no_bg.height * scale / 100)
 
-            # Calculate signature dimensions
-            sig_width = int(sig_no_bg.width * scale / 100)
-            sig_height = int(sig_no_bg.height * scale / 100)
+        # Show calculated values
+        col_info1, col_info2 = st.columns(2)
+        with col_info1:
+            st.metric("Signature Width", f"{sig_width} px")
+        with col_info2:
+            st.metric("Signature Height", f"{sig_height} px")
 
-            # Preview position
-            st.info(f"📊 Signature will be placed at: X={x_pdf:.1f}, Y={y_pdf:.1f} (PDF coordinates)")
-            st.info(f"📏 Signature size: {sig_width} x {sig_height} pixels")
+        # Option to apply to all pages
+        apply_all = st.checkbox(
+            f"Apply signature to all {total_pages} pages", 
+            value=False,
+            help="If unchecked, signature will only appear on the first page"
+        )
 
-            # Option to apply to all pages
-            apply_all = st.checkbox("Apply signature to all pages", value=False)
+        st.divider()
 
-            # Apply signature button
-            if st.button("✍️ Apply Signature", type="primary", use_container_width=True):
-                with st.spinner("Applying signature..."):
-                    try:
-                        # Read PDF again
-                        reader = PdfReader(io.BytesIO(pdf_file.getvalue()))
-                        writer = PdfWriter()
+        # Apply signature button
+        if st.button("✍️ Apply Signature to PDF", type="primary", use_container_width=True):
+            with st.spinner("Applying signature to PDF..."):
+                try:
+                    # Read PDF again
+                    reader = PdfReader(io.BytesIO(pdf_file.getvalue()))
+                    writer = PdfWriter()
 
-                        # Resize signature
-                        sig_resized = sig_no_bg.resize(
-                            (sig_width, sig_height),
-                            Image.Resampling.LANCZOS
-                        )
+                    # Resize signature
+                    sig_resized = sig_no_bg.resize(
+                        (sig_width, sig_height),
+                        Image.Resampling.LANCZOS
+                    )
 
-                        # Process each page
-                        for i, page in enumerate(reader.pages):
-                            # Apply signature to first page or all pages
-                            if i == 0 or apply_all:
-                                packet = io.BytesIO()
+                    # Process each page
+                    for i, page in enumerate(reader.pages):
+                        # Apply signature to first page or all pages
+                        if i == 0 or apply_all:
+                            packet = io.BytesIO()
+                            
+                            # Get page dimensions (they might differ per page)
+                            page_w = float(page.mediabox.width)
+                            page_h = float(page.mediabox.height)
+                            
+                            can = canvas.Canvas(packet, pagesize=(page_w, page_h))
+
+                            # Save signature to temp file
+                            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                                tmp_path = tmp.name
+                                sig_resized.save(tmp_path)
+                            
+                            try:
+                                # Adjust Y coordinate for image height
+                                y_adjusted = y_pdf - sig_height
                                 
-                                # Get page dimensions (they might differ per page)
-                                page_w = float(page.mediabox.width)
-                                page_h = float(page.mediabox.height)
-                                
-                                can = canvas.Canvas(packet, pagesize=(page_w, page_h))
-
-                                # Save signature to temp file
-                                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                                    tmp_path = tmp.name
-                                    sig_resized.save(tmp_path)
-                                
-                                try:
-                                    # Adjust Y coordinate for image height
-                                    y_adjusted = y_pdf - sig_height
-                                    
-                                    # Draw signature on canvas
-                                    can.drawImage(
-                                        tmp_path, 
-                                        x_pdf, 
-                                        y_adjusted,
-                                        width=sig_width,
-                                        height=sig_height,
-                                        mask="auto"
-                                    )
-                                    can.save()
-                                finally:
-                                    # Clean up temp file
+                                # Draw signature on canvas
+                                can.drawImage(
+                                    tmp_path, 
+                                    x_pdf, 
+                                    y_adjusted,
+                                    width=sig_width,
+                                    height=sig_height,
+                                    mask="auto"
+                                )
+                                can.save()
+                            finally:
+                                # Clean up temp file
+                                if os.path.exists(tmp_path):
                                     os.unlink(tmp_path)
 
-                                # Merge signature overlay with page
-                                packet.seek(0)
-                                overlay = PdfReader(packet)
-                                page.merge_page(overlay.pages[0])
+                            # Merge signature overlay with page
+                            packet.seek(0)
+                            overlay = PdfReader(packet)
+                            page.merge_page(overlay.pages[0])
 
-                            writer.add_page(page)
+                        writer.add_page(page)
 
-                        # Write output
-                        output = io.BytesIO()
-                        writer.write(output)
-                        output.seek(0)
+                    # Write output
+                    output = io.BytesIO()
+                    writer.write(output)
+                    output.seek(0)
 
-                        st.success("✅ Signature placed successfully!")
+                    st.success("✅ Signature applied successfully!")
 
-                        # Download button
-                        st.download_button(
-                            "⬇️ Download Signed PDF",
-                            output,
-                            "signed_document.pdf",
-                            "application/pdf",
-                            use_container_width=True
-                        )
+                    # Download button
+                    st.download_button(
+                        "⬇️ Download Signed PDF",
+                        output,
+                        file_name="signed_document.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
 
-                    except Exception as e:
-                        st.error(f"❌ Error applying signature: {str(e)}")
+                except Exception as e:
+                    st.error(f"❌ Error applying signature: {str(e)}")
+                    with st.expander("Show error details"):
                         import traceback
                         st.code(traceback.format_exc())
 
-        except Exception as e:
-            st.error(f"❌ Error processing files: {str(e)}")
-            st.info("Please make sure you've uploaded valid PDF and image files.")
+    except Exception as e:
+        st.error(f"❌ Error processing files: {str(e)}")
+        st.info("Please make sure you've uploaded valid PDF and image files.")
+        with st.expander("Show error details"):
             import traceback
             st.code(traceback.format_exc())
 
-    else:
-        st.info("👆 Please upload both a PDF file and a signature image to get started.")
+else:
+    # Instructions when no files uploaded
+    st.info("👆 **Getting Started:**")
+    st.markdown("""
+    1. Upload your PDF document
+    2. Upload your signature image (PNG or JPG)
+    3. Use the sliders to position and size your signature
+    4. Click 'Apply Signature to PDF'
+    5. Download your signed document
+    """)
+    
+    st.warning("💡 **Tip:** For best results, use a signature image with a white background. It will be automatically removed!")
+
 
 
 #######################################################################
@@ -2128,6 +2178,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
