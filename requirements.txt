@@ -7,3 +7,7 @@ pytesseract
 img2pdf
 openpyxl
 pandas
+
+pypdf
+rembg
+opencv-python
