@@ -11,3 +11,6 @@ pandas
 pypdf
 rembg
 opencv-python
+onnxruntime
+
+
