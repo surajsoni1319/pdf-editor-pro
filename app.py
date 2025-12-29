@@ -1097,13 +1097,12 @@ elif feature == "📝 Extract Text":
                 import traceback
                 st.text_area("Error Details", traceback.format_exc(), height=200)
 
-
-
-
-# Feature 7: Extract Images (ROBUST – LOGOS SUPPORTED)
+# ===============================
+# Feature 7: Extract Images (ROBUST + SCANNED PDF FALLBACK)
+# ===============================
 elif feature == "🖼️ Extract Images":
     st.header("🖼️ Extract Images from PDF")
-    st.write("Extract embedded images (logos, photos) from PDFs.")
+    st.write("Extract embedded images (logos, photos). Auto-fallback for scanned PDFs.")
 
     uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
 
@@ -1115,17 +1114,24 @@ elif feature == "🖼️ Extract Images":
             detected_images = 0
             zip_buffer = io.BytesIO()
 
-            with st.spinner("Scanning PDF for images..."):
+            # ==================================================
+            # STEP 1: TRY EMBEDDED IMAGE EXTRACTION (PyPDF2)
+            # ==================================================
+            with st.spinner("Scanning PDF for embedded images..."):
                 for page_num, page in enumerate(reader.pages, start=1):
 
                     resources = page.get("/Resources")
-                    if not resources or "/XObject" not in resources:
+                    if not resources:
                         continue
 
-                    xObject = resources["/XObject"].get_object()
+                    xobjects = resources.get("/XObject")
+                    if not xobjects:
+                        continue
 
-                    for obj_name in xObject:
-                        obj = xObject[obj_name]
+                    xobjects = xobjects.get_object()
+
+                    for obj_name in xobjects:
+                        obj = xobjects[obj_name]
 
                         if obj.get("/Subtype") != "/Image":
                             continue
@@ -1134,33 +1140,30 @@ elif feature == "🖼️ Extract Images":
 
                         try:
                             data = obj.get_data()
-                            filters = obj.get("/Filter")
 
-                            # Normalize filters to list
-                            if isinstance(filters, list):
-                                filters = [f for f in filters]
-                            elif filters:
+                            filters = obj.get("/Filter")
+                            if filters and not isinstance(filters, list):
                                 filters = [filters]
-                            else:
+                            elif not filters:
                                 filters = []
 
                             image_name = f"page_{page_num}_{obj_name[1:]}"
+                            img = None
 
-                            # -----------------------------
-                            # CASE 1: JPEG / JPEG2000
-                            # -----------------------------
+                            # JPEG / JPEG2000
                             if "/DCTDecode" in filters or "/JPXDecode" in filters:
                                 img = Image.open(io.BytesIO(data)).convert("RGB")
-                                ext = "jpg"
 
-                            # -----------------------------
-                            # CASE 2: Raw bitmap
-                            # -----------------------------
+                            # RAW bitmap (logos, stamps)
                             else:
-                                width = obj["/Width"]
-                                height = obj["/Height"]
+                                width = obj.get("/Width")
+                                height = obj.get("/Height")
+
+                                if not width or not height:
+                                    continue
 
                                 color_space = obj.get("/ColorSpace")
+
                                 if isinstance(color_space, list) and color_space[0] == "/ICCBased":
                                     mode = "RGB"
                                 elif color_space == "/DeviceRGB":
@@ -1172,43 +1175,59 @@ elif feature == "🖼️ Extract Images":
                                 else:
                                     continue
 
-                                img = Image.frombytes(mode, (width, height), data)
-                                ext = "png"
+                                try:
+                                    img = Image.frombytes(mode, (width, height), data)
+                                except Exception:
+                                    continue
 
-                            # Save image
-                            img_buffer = io.BytesIO()
-                            img.save(img_buffer, format="PNG")
-                            img_buffer.seek(0)
+                            if img:
+                                buf = io.BytesIO()
+                                img.save(buf, format="PNG")
+                                buf.seek(0)
 
-                            extracted_images.append({
-                                "name": f"{image_name}.png",
-                                "data": img_buffer.getvalue(),
-                                "page": page_num
-                            })
+                                extracted_images.append({
+                                    "name": f"{image_name}.png",
+                                    "data": buf.getvalue(),
+                                    "page": page_num
+                                })
 
                         except Exception:
                             continue
 
-            # -----------------------------
-            # RESULTS
-            # -----------------------------
-            if not detected_images:
-                st.warning("⚠️ No image objects found in this PDF.")
-                st.stop()
+            # ==================================================
+            # STEP 2: FALLBACK FOR SCANNED PDFs (pdf2image)
+            # ==================================================
+            if detected_images == 0 or not extracted_images:
+                st.info("ℹ️ No embedded images found. PDF appears scanned. Extracting full-page images...")
 
-            if detected_images > 0 and not extracted_images:
-                st.warning(
-                    f"⚠️ {detected_images} image object(s) detected, "
-                    "but they could not be extracted as standalone images. "
-                    "They may be masked, vector-based, or part of scanned pages."
-                )
+                from pdf2image import convert_from_bytes
+
+                pages = convert_from_bytes(uploaded_file.getvalue(), dpi=300)
+
+                extracted_images = []
+                for i, page_img in enumerate(pages, start=1):
+                    buf = io.BytesIO()
+                    page_img.save(buf, format="PNG")
+                    buf.seek(0)
+
+                    extracted_images.append({
+                        "name": f"page_{i}.png",
+                        "data": buf.getvalue(),
+                        "page": i
+                    })
+
+            # ==================================================
+            # RESULTS
+            # ==================================================
+            if not extracted_images:
+                st.warning("⚠️ No images could be extracted from this PDF.")
                 st.stop()
 
             st.success(f"✅ Extracted {len(extracted_images)} image(s)")
 
-            # -----------------------------
+            # ==================================================
             # PREVIEW & DOWNLOAD
-            # -----------------------------
+            # ==================================================
             cols = st.columns(3)
             for idx, img in enumerate(extracted_images):
                 with cols[idx % 3]:
@@ -1242,6 +1261,9 @@ elif feature == "🖼️ Extract Images":
 
         except Exception as e:
             st.error(f"❌ Error extracting images: {str(e)}")
+
+
+
 
 # Feature 8: Compress PDF (FINAL – NO SIZE INCREASE GUARANTEE)
 elif feature == "🗜️ Compress PDF":
@@ -1787,6 +1809,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
