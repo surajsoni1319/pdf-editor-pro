@@ -10,7 +10,6 @@ pandas
 
 pypdf
 opencv-python
-onnxruntime
 
 
 
