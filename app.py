@@ -1936,9 +1936,6 @@ elif feature == "🔀 Reorder Pages":
 # Feature: Add Signature to PDF
 # ======================================================
 
-# ======================================================
-# Feature: Add Signature to PDF (PIL-only, Cloud Safe)
-# ======================================================
 elif feature == "✍️ Sign PDF":
 
     st.header("✍️ Sign PDF")
@@ -1953,19 +1950,26 @@ elif feature == "✍️ Sign PDF":
     import tempfile
 
     # -----------------------------
-    # Background removal (PIL only)
+    # Background removal (FIXED)
     # -----------------------------
     def remove_signature_background(sig_image: Image.Image) -> Image.Image:
+        """
+        Removes near-white background from a signature image.
+        Safe for Streamlit Cloud & Python 3.13.
+        """
         sig = sig_image.convert("RGBA")
         data = np.array(sig)
 
-        r, g, b, a = data.T
+        # Extract RGB channels
+        r = data[:, :, 0]
+        g = data[:, :, 1]
+        b = data[:, :, 2]
 
         # Detect near-white background
         white_bg = (r > 230) & (g > 230) & (b > 230)
 
         # Make background transparent
-        data[..., 3][white_bg] = 0
+        data[white_bg, 3] = 0
 
         return Image.fromarray(data)
 
@@ -2061,6 +2065,9 @@ elif feature == "✍️ Sign PDF":
                 use_container_width=True
             )
 
+
+
+
 #######################################################################
 
 
@@ -2073,6 +2080,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
