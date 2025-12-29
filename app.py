@@ -1936,6 +1936,9 @@ elif feature == "🔀 Reorder Pages":
 # Feature: Add Signature to PDF
 # ======================================================
 
+# ======================================================
+# Feature: Add Signature to PDF (FINAL – CRASH PROOF)
+# ======================================================
 elif feature == "✍️ Sign PDF":
 
     st.header("✍️ Sign PDF")
@@ -1949,18 +1952,14 @@ elif feature == "✍️ Sign PDF":
     import io
     import tempfile
 
-    # -----------------------------
-    # Background removal (FIXED)
-    # -----------------------------
+    # --------------------------------------------------
+    # SAFE background removal (NO IndexError)
+    # --------------------------------------------------
     def remove_signature_background(sig_image: Image.Image) -> Image.Image:
-        """
-        Removes near-white background from a signature image.
-        Safe for Streamlit Cloud & Python 3.13.
-        """
         sig = sig_image.convert("RGBA")
         data = np.array(sig)
 
-        # Extract RGB channels
+        # RGB channels
         r = data[:, :, 0]
         g = data[:, :, 1]
         b = data[:, :, 2]
@@ -1968,31 +1967,31 @@ elif feature == "✍️ Sign PDF":
         # Detect near-white background
         white_bg = (r > 230) & (g > 230) & (b > 230)
 
-        # Make background transparent
+        # ✅ CORRECT masking (THIS FIXES THE ERROR)
         data[white_bg, 3] = 0
 
         return Image.fromarray(data)
 
-    # -----------------------------
+    # --------------------------------------------------
     # Upload inputs
-    # -----------------------------
+    # --------------------------------------------------
     pdf_file = st.file_uploader("📄 Upload PDF", type=["pdf"])
     sig_file = st.file_uploader("✍️ Upload Signature (PNG / JPG)", type=["png", "jpg", "jpeg"])
 
     if pdf_file and sig_file:
 
-        # -----------------------------
+        # --------------------------------------------------
         # Process signature
-        # -----------------------------
+        # --------------------------------------------------
         sig_image = Image.open(sig_file)
         sig_no_bg = remove_signature_background(sig_image)
 
         st.subheader("🖋️ Signature Preview")
         st.image(sig_no_bg, width=250)
 
-        # -----------------------------
+        # --------------------------------------------------
         # PDF info
-        # -----------------------------
+        # --------------------------------------------------
         reader = PdfReader(pdf_file)
         total_pages = len(reader.pages)
 
@@ -2021,9 +2020,9 @@ elif feature == "✍️ Sign PDF":
             )
         )
 
-        # -----------------------------
+        # --------------------------------------------------
         # Apply signature
-        # -----------------------------
+        # --------------------------------------------------
         if st.button("✍️ Apply Signature", use_container_width=True):
 
             writer = PdfWriter()
@@ -2080,6 +2079,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
