@@ -567,7 +567,11 @@ elif feature == "💧 Add Watermark":
             "watermarked_document.pdf",
             "⬇️ Download Final Watermarked PDF"
         )
-# feature: OCR
+
+
+# Feature OCR
+
+
 elif feature == "📝 Extract Text":
     st.header("📝 Extract Text from PDF")
     st.write("Extract text from digital or scanned PDFs using OCR if required.")
@@ -689,14 +693,15 @@ elif feature == "📝 Extract Text":
                         r"Invoice\s+No[\.:\s]+(\d+)",
                         r"Invoice\s*#[:\s]*([A-Z0-9\-]+)",
                         r"Bill\s+No[\.:\s]+([A-Z0-9\-]+)",
-                        r"Tax\s+Invoice[^\n]*\n[^\n]*\n[^\d]*(\d+)"
+                        r"Tax\s+Invoice[^\n]*\n[^\n]*Invoice\s+No[\.:\s]+([A-Z0-9/\-]+)"
                     ], text)
                     
                     invoice_data["Invoice Date"] = find_multi([
                         r"Invoice\s+Date[\.:\s]+([\d/\-]+)",
                         r"Dated[\.:\s]+([\d/\-]+)",
                         r"Date[\.:\s]+([\d]{1,2}[/-][A-Za-z]{3}[/-][\d]{2,4})",
-                        r"Date[\.:\s]+([\d]{1,2}[/-][\d]{1,2}[/-][\d]{2,4})"
+                        r"Date[\.:\s]+([\d]{1,2}[/-][\d]{1,2}[/-][\d]{2,4})",
+                        r"Invoice\s+No[^\n]+\n[^\n]*Dated[^\n]*\n([^\n]*\d{2}[-/]\d{2}[-/]\d{4})"
                     ], text)
                     
                     invoice_data["Due Date"] = find_multi([
@@ -707,20 +712,27 @@ elif feature == "📝 Extract Text":
                     # ========== ACKNOWLEDGMENT & REFERENCE ==========
                     invoice_data["Ack No"] = find_multi([
                         r"Ack\s+No[\.:\s]+([A-Z0-9]+)",
-                        r"Acknowledgment[\.:\s]+([A-Z0-9]+)"
+                        r"Acknowledgment[\.:\s]+([A-Z0-9]+)",
+                        r"No\.[\.:\s]+(\d{12,})"  # Long numeric ack numbers
                     ], text)
                     
                     invoice_data["Ack Date"] = find_multi([
-                        r"Ack\s+Date[\.:\s]+([\d/\-]+)"
+                        r"Ack\s+Date[\.:\s]+([\d/\-]+)",
+                        r"Date\s+r[\.:\s]+([\d\-]+[A-Za-z]{3}\-[\d]{2})"  # Date r format
                     ], text)
                     
                     invoice_data["IRN Number"] = find_multi([
                         r"IRN[\.:\s]+([A-Za-z0-9\-]+)",
-                        r"IRN\s+No[\.:\s]+([A-Za-z0-9\-]+)"
+                        r"IRN\s+No[\.:\s]+([A-Za-z0-9\-]+)",
+                        r"IRN[\.:\s]*\n[\.:\s]*([a-z0-9\-]{40,})"  # Long IRN on next line
                     ], text)
                     
                     invoice_data["CIN Number"] = find_multi([
                         r"CIN\s+NO[\.:\s]+([A-Z0-9]+)"
+                    ], text)
+                    
+                    invoice_data["PAN"] = find_multi([
+                        r"PAN[\.:\s]+([A-Z]{5}\d{4}[A-Z])"
                     ], text)
                     
                     # ========== E-WAY BILL ==========
@@ -746,15 +758,21 @@ elif feature == "📝 Extract Text":
                         r"S\.?O\.?\s+Date[\.:\s]+([\d/]+)"
                     ], text)
                     
+                    # ========== ORDER DETAILS ==========
                     invoice_data["Purchase Order No"] = find_multi([
-                        r"(?:Cust|Customer|Buyer[^\n]*)\s*PO\s+No[\.:\s]+([A-Z0-9\-]+)",
-                        r"P\.?O\.?\s+No[\.:\s]+([A-Z0-9\-]+)",
-                        r"Buyer'?s?\s+Order\s+No[\.:\s]+([A-Z0-9\-]+)"
+                        r"(?:Cust|Customer|Buyer[^\n]*)\s*(?:PO|P\.O\.)\s+No[\.:\s]+([A-Z0-9\-]+)",
+                        r"PO\s+NO[\.:\-\s]+([A-Z0-9\-]+)",
+                        r"Buyer'?s?\s+Order\s+No[\.:\-\s]+([A-Z0-9\-]+)"
                     ], text)
                     
                     invoice_data["Reference No"] = find_multi([
-                        r"(?:Our\s+)?Ref(?:erence)?[\.:\s]+No[\.:\s]+([A-Z0-9\-]+)",
-                        r"Reference\s+No[\.:\s&]+Date[^\n]*?([A-Z0-9\-]+)"
+                        r"(?:Our\s+)?Ref(?:erence)?[\.:\s]+No[\.:\s&]+Date[\.:\s]+([A-Z0-9]+)",
+                        r"Reference\s+No[\.:\s&]+Date[^\n]*?([A-Z0-9]+)\s+dt\.",
+                        r"Other\s+References[\.:\s]+([A-Z0-9\-]+)"
+                    ], text)
+                    
+                    invoice_data["Reference Date"] = find_multi([
+                        r"Reference\s+No[^d]+dt\.\s*([\d\-/A-Za-z]+)"
                     ], text)
                     
                     # ========== DELIVERY/DISPATCH ==========
@@ -778,10 +796,22 @@ elif feature == "📝 Extract Text":
                     ], text)
                     
                     # ========== SELLER/SUPPLIER DETAILS ==========
+                    # Try to find seller name (could be individual or company)
                     invoice_data["Seller Name"] = find_multi([
                         r"^([A-Z][A-Z\s&\.]+(?:LIMITED|LTD|PVT|PRIVATE|LLP|ASSOCIATES|COMPANY))",
                         r"(?:Seller|Supplier|From)[^\n:]*:\s*([A-Z][^\n]+(?:LIMITED|LTD|PVT))",
+                        r"^([A-Z]{2,}(?:\s+[A-Z]{2,})+)\n",  # Individual name in caps
                         r"(STAR\s+CEMENT\s+LIMITED)"
+                    ], text)
+                    
+                    # Seller address/location
+                    invoice_data["Seller Address"] = find_multi([
+                        r"^[A-Z\s]+\n([A-Z][^\n]+)\n([A-Z][^\n]+)\n([A-Z][^\n,]+,\s*[A-Z\s]+-\s*\d{6})"
+                    ], text)
+                    
+                    invoice_data["Seller Location"] = find_multi([
+                        r"^[A-Z\s&]+\n[A-Z\s]+\n([A-Z\s,]+?)(?:,\s*[A-Z\s]+-\s*\d{6})",
+                        r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),\s*([A-Z\s]+)-\s*(\d{6})"
                     ], text)
                     
                     # Extract all GSTIN
@@ -830,9 +860,15 @@ elif feature == "📝 Extract Text":
                         invoice_data["Customer State"] = all_states[1].strip()
                     
                     # ========== BUYER/CUSTOMER DETAILS ==========
-                    invoice_data["Customer Name"] = find_multi([
-                        r"(?:Consignee|Buyer|Customer|Bill\s+to)[^\n:]*:\s*([A-Z][^\n]+)",
+                    invoice_data["Buyer/Customer Name"] = find_multi([
+                        r"Buyer\s+Name[\.:\s]+([A-Z][^\n]+)",
+                        r"(?:Consignee|Customer|Bill\s+to)[^\n:]*:\s*([A-Z][^\n]+)",
                         r"Name[^\n]*Customer[^\n:]*:\s*([^\n]+)"
+                    ], text)
+                    
+                    invoice_data["Buyer Address"] = find_multi([
+                        r"Buyer\s+Address[\.:\s]+([^\n]+(?:\n[^\n]+)*?)(?=\n(?:District|GSTIN))",
+                        r"(?:Consignee|Customer)\s+Address[\.:\s]+([^\n]+)"
                     ], text)
                     
                     invoice_data["Ship To Name"] = find_multi([
@@ -860,10 +896,19 @@ elif feature == "📝 Extract Text":
                     else:
                         invoice_data["Transporter Name"] = transporter_line
                     
-                    invoice_data["Vehicle Number"] = find_multi([
-                        r"Vehicle\s+(?:Reg\.?\s+)?No[\.:\s]+([A-Z]{2}\d{2}[A-Z]{1,2}\d{4})",
-                        r"Vehicle[\.:\s]+([A-Z]{2}\d{2}[A-Z]{1,2}\d{4})",
-                        r"Motor\s+Vehicle\s+No[\.:\s]+([A-Z0-9]+)"
+                    # ========== ADDITIONAL FIELDS FOR SIMPLE INVOICES ==========
+                    invoice_data["Vehicle No"] = find_multi([
+                        r"Vehicle\s+No[\.:\s]+([A-Z]{2}[-\s]?\d{2}[A-Z]{1,2}[-\s]?\d{4})",
+                        r"Vehicle\s+(?:Reg\.?\s+)?No[\.:\s]+([A-Z0-9\-]+)"
+                    ], text)
+                    
+                    invoice_data["Place of Supply"] = find_multi([
+                        r"Place\s+of\s+Supply[\.:\s]+([A-Z][^\n]+)"
+                    ], text)
+                    
+                    invoice_data["Order No"] = find_multi([
+                        r"Order\s+No[\.:\s]+([A-Z0-9]+)",
+                        r"Order\s+No[\.:\s]+([\d]+)"
                     ], text)
                     
                     invoice_data["LR/RR No"] = find_multi([
@@ -908,11 +953,13 @@ elif feature == "📝 Extract Text":
                     ], text)
                     
                     invoice_data["CGST"] = find_multi([
-                        r"CGST[\.:\s@]*([\d,]+\.?\d*)"
+                        r"CGST[\.:\s]*([\d,]+\.?\d*)",
+                        r"Central\s+Tax[^\n]*Amount[\.:\s]*([\d,]+\.?\d*)"
                     ], text)
                     
                     invoice_data["SGST"] = find_multi([
-                        r"SGST[\.:\s@]*([\d,]+\.?\d*)"
+                        r"SGST[\.:\s]*([\d,]+\.?\d*)",
+                        r"State\s+Tax[^\n]*Amount[\.:\s]*([\d,]+\.?\d*)"
                     ], text)
                     
                     invoice_data["IGST Rate"] = find_multi([
@@ -929,8 +976,8 @@ elif feature == "📝 Extract Text":
                     ], text)
                     
                     invoice_data["Round Off"] = find_multi([
-                        r"R[/\\]?OFF[\.:\s\-•]*([\-\d,\.]+)",
-                        r"Round\s+Off[\.:\s]*([\-\d,\.]+)"
+                        r"ROUND(?:ED)?\s+OFF[\.:\s]*([\-\d,\.]+)",
+                        r"R[/\\]?OFF[\.:\s\-•]*([\-\d,\.]+)"
                     ], text)
                     
                     invoice_data["Total Amount"] = find_multi([
@@ -966,7 +1013,30 @@ elif feature == "📝 Extract Text":
                     
                     # Multiple pattern attempts for different formats
                     patterns = [
-                        # Format 1: Star Cement style
+                        # Format 1: Simple vendor invoice (Challan/Material based)
+                        re.compile(
+                            r"(?P<sl>\d+)\s+"
+                            r"(?P<challan>\d+)\s+"
+                            r"(?P<date>[\d\-/]+)\s+"
+                            r"(?P<vehicle>[A-Z]{2}[-\s]?\d{2}[A-Z]{1,2}[-\s]?\d{4})\s+"
+                            r"(?P<material>[A-Z][A-Z\s]+?)\s+"
+                            r"(?P<qty>[\d,]+\.?\d*)\s+"
+                            r"(?P<rate>[\d,]+\.?\d*)\s+"
+                            r"(?P<amount>[\d,]+\.?\d*)",
+                            re.IGNORECASE
+                        ),
+                        # Format 2: Corporate B2B with HSN (ICA style) - handles multi-line descriptions
+                        re.compile(
+                            r"(?P<sl>\d+)\s+"
+                            r"(?P<hsn>\d{8})\s+"
+                            r"(?P<description>.+?)\s+"
+                            r"(?P<qty>[\d,]+\.?\d*)\s+(?P<uom>PCS|MT|KG|TON|UNIT)\s+"
+                            r"(?P<rate>[\d,]+\.?\d*)\s+"
+                            r"(?P<per>PCS|MT|KG|TON|UNIT)\s+"
+                            r"(?P<amount>[\d,]+\.?\d*)",
+                            re.IGNORECASE | re.DOTALL
+                        ),
+                        # Format 3: Star Cement corporate style
                         re.compile(
                             r"(?P<sl>\d+)\s+"
                             r"(?P<description>(?:CEMENT|CLINKER|GRADE)[^\n]+?)\s+"
@@ -975,7 +1045,7 @@ elif feature == "📝 Extract Text":
                             r"(?P<rate>[\d,]+\.?\d*)",
                             re.IGNORECASE
                         ),
-                        # Format 2: With package info
+                        # Format 4: With package info
                         re.compile(
                             r"(?P<description>(?:CEMENT|CLINKER)[^\n]*?)\s+"
                             r"(?P<hsn>\d{6,8})\s+"
@@ -986,13 +1056,22 @@ elif feature == "📝 Extract Text":
                             r"(?P<rate>[\d,.]+)",
                             re.IGNORECASE
                         ),
-                        # Format 3: Simple table format
+                        # Format 5: Standard GST invoice table
                         re.compile(
+                            r"(?P<sl>\d+)\s+"
                             r"(?P<description>[A-Z][A-Z\s,\-:]+?)\s+"
                             r"(?P<hsn>\d{6,8})\s+"
                             r"(?P<qty>[\d,]+\.?\d*)\s+"
                             r"(?P<rate>[\d,]+\.?\d*)\s+"
                             r"(?P<per>[A-Z]{2,3})\s+"
+                            r"(?P<amount>[\d,]+\.?\d*)",
+                            re.IGNORECASE
+                        ),
+                        # Format 6: Fallback - any row with quantity and amount
+                        re.compile(
+                            r"(?P<description>[A-Z][A-Z\s]+(?:SAND|CEMENT|CLINKER|MATERIAL|MOTOR)[^\d\n]*?)\s+"
+                            r"(?P<qty>[\d,]+\.?\d*)\s+"
+                            r"(?P<rate>[\d,]+\.?\d*)\s+"
                             r"(?P<amount>[\d,]+\.?\d*)",
                             re.IGNORECASE
                         )
@@ -1008,17 +1087,30 @@ elif feature == "📝 Extract Text":
                                     
                                     if "sl" in groups and groups["sl"]:
                                         item["Sl No"] = groups["sl"]
-                                    if "description" in groups:
-                                        item["Description"] = groups["description"].strip()
-                                    if "hsn" in groups:
+                                    if "challan" in groups and groups["challan"]:
+                                        item["Challan No"] = groups["challan"]
+                                    if "date" in groups and groups["date"]:
+                                        item["Date"] = groups["date"]
+                                    if "vehicle" in groups and groups["vehicle"]:
+                                        item["Vehicle No"] = groups["vehicle"]
+                                    if "material" in groups and groups["material"]:
+                                        # Clean up material description
+                                        material_desc = groups["material"].strip()
+                                        item["Material/Description"] = material_desc
+                                    if "description" in groups and groups["description"]:
+                                        # Clean multi-line descriptions
+                                        desc = groups["description"].strip()
+                                        desc = re.sub(r'\s+', ' ', desc)  # Collapse whitespace
+                                        item["Description"] = desc
+                                    if "hsn" in groups and groups["hsn"]:
                                         item["HSN/SAC"] = groups["hsn"]
                                     if "qty" in groups:
                                         item["Quantity"] = groups["qty"]
-                                    if "uom" in groups:
+                                    if "uom" in groups and groups["uom"]:
                                         item["UOM"] = groups["uom"]
                                     if "rate" in groups:
                                         item["Rate"] = groups["rate"]
-                                    if "per" in groups:
+                                    if "per" in groups and groups["per"]:
                                         item["Per"] = groups["per"]
                                     if "amount" in groups:
                                         item["Amount"] = groups["amount"]
@@ -1027,7 +1119,7 @@ elif feature == "📝 Extract Text":
                                     if "bags" in groups and groups.get("bags"):
                                         item["No of Bags"] = groups["bags"]
                                     
-                                    if item:
+                                    if item and len(item) >= 3:  # At least 3 fields
                                         line_items.append(item)
                                 except Exception as e:
                                     continue
@@ -1096,6 +1188,7 @@ elif feature == "📝 Extract Text":
                 st.error(f"❌ Error during extraction: {str(e)}")
                 import traceback
                 st.text_area("Error Details", traceback.format_exc(), height=200)
+
 
 # ===============================
 # Feature 7: Extract Images (ROBUST + SCANNED PDF FALLBACK)
@@ -1809,6 +1902,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
