@@ -2196,81 +2196,85 @@ if feature == "✍️ Sign PDF":
         sig_positions = components.html(html, height=850)
 
         # Store in session state when received
-        if sig_positions and isinstance(sig_positions, dict):
+        if sig_positions and isinstance(sig_positions, dict) and sig_positions:
             st.session_state.signatures_applied = sig_positions
-            st.rerun()
 
         # ---------- Download Signed PDF ----------
         st.divider()
         st.subheader("📥 Download Section")
         
+        # Show download section if button is clicked
+        if st.button("🔄 Ready to Download? Click Here", type="secondary", use_container_width=True):
+            st.session_state.show_download = True
+        
         # Check session state for signatures
-        if st.session_state.signatures_applied and isinstance(st.session_state.signatures_applied, dict):
-            # Check if there are any actual signatures
-            has_sigs = any(st.session_state.signatures_applied.values())
-            
-            if has_sigs:
-                st.success(f"✅ Signatures applied on {len([k for k, v in st.session_state.signatures_applied.items() if v])} page(s)! Ready to download.")
+        if st.session_state.get('show_download', False):
+            if st.session_state.signatures_applied and isinstance(st.session_state.signatures_applied, dict):
+                # Check if there are any actual signatures
+                has_sigs = any(st.session_state.signatures_applied.values())
                 
-                if st.button("⬇️ Generate Signed PDF", type="primary", use_container_width=True):
-                    with st.spinner("Generating signed PDF..."):
-                        writer = PdfWriter()
+                if has_sigs:
+                    st.success(f"✅ Signatures detected on {len([k for k, v in st.session_state.signatures_applied.items() if v])} page(s)!")
+                    
+                    if st.button("⬇️ Generate Signed PDF", type="primary", use_container_width=True):
+                        with st.spinner("Generating signed PDF..."):
+                            writer = PdfWriter()
 
-                        tmp_sig = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-                        sig_no_bg.save(tmp_sig.name)
+                            tmp_sig = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+                            sig_no_bg.save(tmp_sig.name)
 
-                        for i, page in enumerate(reader.pages):
-                            page_signatures = st.session_state.signatures_applied.get(str(i), [])
-                            
-                            if page_signatures:
-                                packet = io.BytesIO()
-                                page_w = float(page.mediabox.width)
-                                page_h = float(page.mediabox.height)
-                                can = canvas.Canvas(packet, pagesize=(page_w, page_h))
+                            for i, page in enumerate(reader.pages):
+                                page_signatures = st.session_state.signatures_applied.get(str(i), [])
+                                
+                                if page_signatures:
+                                    packet = io.BytesIO()
+                                    page_w = float(page.mediabox.width)
+                                    page_h = float(page.mediabox.height)
+                                    can = canvas.Canvas(packet, pagesize=(page_w, page_h))
 
-                                for p in page_signatures:
-                                    can.drawImage(
-                                        tmp_sig.name,
-                                        p["x"],
-                                        page_h - p["y"] - p["h"],
-                                        p["w"],
-                                        p["h"],
-                                        mask="auto"
-                                    )
+                                    for p in page_signatures:
+                                        can.drawImage(
+                                            tmp_sig.name,
+                                            p["x"],
+                                            page_h - p["y"] - p["h"],
+                                            p["w"],
+                                            p["h"],
+                                            mask="auto"
+                                        )
 
-                                can.save()
-                                packet.seek(0)
-                                overlay = PdfReader(packet)
-                                page.merge_page(overlay.pages[0])
+                                    can.save()
+                                    packet.seek(0)
+                                    overlay = PdfReader(packet)
+                                    page.merge_page(overlay.pages[0])
 
-                            writer.add_page(page)
+                                writer.add_page(page)
 
-                        os.unlink(tmp_sig.name)
+                            os.unlink(tmp_sig.name)
 
-                        out = io.BytesIO()
-                        writer.write(out)
-                        out.seek(0)
+                            out = io.BytesIO()
+                            writer.write(out)
+                            out.seek(0)
 
-                        st.success("✅ PDF signed successfully!")
-                        st.download_button(
-                            "📥 Download Signed PDF",
-                            out,
-                            file_name="signed_document.pdf",
-                            mime="application/pdf",
-                            use_container_width=True
-                        )
+                            st.success("✅ PDF signed successfully!")
+                            st.download_button(
+                                "📥 Download Signed PDF",
+                                out,
+                                file_name="signed_document.pdf",
+                                mime="application/pdf",
+                                use_container_width=True
+                            )
+                else:
+                    st.warning("⚠️ No signatures detected. Please drag signatures onto the PDF and click 'Apply Signatures' first.")
             else:
-                st.info("💡 Drag your signature onto the PDF pages above, then click 'Apply Signatures'.")
+                st.info("💡 Please click the green '✅ Apply Signatures' button in the sidebar after dragging your signature.")
         else:
-            st.info("💡 Drag your signature onto the PDF pages above, then click the green '✅ Apply Signatures' button.")
+            st.info("💡 After applying signatures, click the '🔄 Ready to Download?' button above.")
 
     else:
         st.info("👆 Upload both PDF and signature to continue")
         # Reset session state when files are removed
         if 'signatures_applied' in st.session_state:
             st.session_state.signatures_applied = None
-
-
 
 
 
@@ -2286,6 +2290,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
