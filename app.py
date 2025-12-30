@@ -2072,7 +2072,7 @@ if feature == "✍️ Sign PDF":
                 }}
 
                 function apply() {{
-                    const data = sigs.map(s => ({{   // IMPORTANT: double {{ }}
+                    const data = sigs.map(s => ({{
                         x: (parseFloat(s.style.left) / pdf.offsetWidth) * {pdf_w},
                         y: (parseFloat(s.style.top) / pdf.offsetHeight) * {pdf_h},
                         w: (parseFloat(s.offsetWidth) / pdf.offsetWidth) * {pdf_w},
@@ -2133,6 +2133,12 @@ if feature == "✍️ Sign PDF":
                     "📥 Download Signed PDF",
                     out,
                     file_name="signed_document.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+
+    else:
+        st.info("👆 Upload both PDF and signature to continue")
 
 
 #######################################################################
@@ -2147,6 +2153,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
