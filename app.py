@@ -1935,9 +1935,6 @@ elif feature == "🔀 Reorder Pages":
 # ======================================================
 # Feature: Sign PDF 
 # ======================================================
-# ======================================================
-# Feature: Sign PDF (FINAL – STABLE)
-# ======================================================
 if feature == "✍️ Sign PDF":
 
     import streamlit as st
@@ -1991,22 +1988,34 @@ if feature == "✍️ Sign PDF":
         sig_no_bg.save(sig_buf, format="PNG")
         sig_b64 = base64.b64encode(sig_buf.getvalue()).decode()
 
-        # Load PDF as image
+        # Read PDF info
+        reader = PdfReader(io.BytesIO(pdf_file.getvalue()))
+        total_pages = len(reader.pages)
+
+        st.success(f"✅ PDF loaded successfully ({total_pages} page(s))")
+
+        # Page selector
+        if total_pages > 1:
+            current_page = st.selectbox(
+                "📄 Select Page to Sign",
+                range(1, total_pages + 1),
+                format_func=lambda x: f"Page {x} of {total_pages}"
+            ) - 1
+        else:
+            current_page = 0
+
+        # Load PDF as image for selected page
         images = convert_from_bytes(pdf_file.getvalue(), dpi=150)
-        pdf_img = images[0]
+        pdf_img = images[current_page]
 
         pdf_buf = io.BytesIO()
         pdf_img.save(pdf_buf, format="PNG")
         pdf_b64 = base64.b64encode(pdf_buf.getvalue()).decode()
 
-        # Read PDF info
-        reader = PdfReader(io.BytesIO(pdf_file.getvalue()))
-        page0 = reader.pages[0]
-        pdf_w = float(page0.mediabox.width)
-        pdf_h = float(page0.mediabox.height)
-        total_pages = len(reader.pages)
-
-        st.success(f"✅ PDF loaded successfully ({total_pages} page(s))")
+        # Get dimensions for current page
+        page = reader.pages[current_page]
+        pdf_w = float(page.mediabox.width)
+        pdf_h = float(page.mediabox.height)
 
         # ---------- HTML + JS (FIXED f-string escaping) ----------
         html = f"""
@@ -2142,6 +2151,7 @@ if feature == "✍️ Sign PDF":
     else:
         st.info("👆 Upload both PDF and signature to continue")
 
+
 #######################################################################
 
 
@@ -2154,6 +2164,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
