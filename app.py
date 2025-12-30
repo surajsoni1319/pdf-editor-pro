@@ -1933,9 +1933,12 @@ elif feature == "🔀 Reorder Pages":
 
 
 # ======================================================
-# Feature: Sign PDF (Click to Place) – UPLOAD FIXED
+# Feature: Sign PDF 
 # ======================================================
-if feature == "✍️ Sign PDF (Click to Place)":
+# ======================================================
+# Feature: Sign PDF (FINAL – UPLOAD FIXED)
+# ======================================================
+if feature == "✍️ Sign PDF":
 
     import streamlit as st
     from pypdf import PdfReader, PdfWriter
@@ -1947,7 +1950,7 @@ if feature == "✍️ Sign PDF (Click to Place)":
     import io, tempfile, base64, os
 
     st.header("✍️ Sign PDF – Drag & Drop Signature")
-    st.write("Upload a PDF and signature, then drag the signature onto the document.")
+    st.write("Upload a PDF and a signature image, then drag the signature onto the document.")
 
     # ---------- Background Removal ----------
     def remove_signature_background(img, threshold=230):
@@ -1979,167 +1982,161 @@ if feature == "✍️ Sign PDF (Click to Place)":
 
     # ---------- PROCESS ONLY AFTER BOTH FILES ----------
     if pdf_file and sig_file:
-        try:
-            # ---------- Process Signature ----------
-            sig_img = Image.open(sig_file)
-            sig_no_bg = remove_signature_background(sig_img)
 
-            sig_buf = io.BytesIO()
-            sig_no_bg.save(sig_buf, format="PNG")
-            sig_b64 = base64.b64encode(sig_buf.getvalue()).decode()
+        # Process signature
+        sig_img = Image.open(sig_file)
+        sig_no_bg = remove_signature_background(sig_img)
 
-            # ---------- Load PDF ----------
-            images = convert_from_bytes(pdf_file.getvalue(), dpi=150)
-            pdf_img = images[0]
+        sig_buf = io.BytesIO()
+        sig_no_bg.save(sig_buf, format="PNG")
+        sig_b64 = base64.b64encode(sig_buf.getvalue()).decode()
 
-            pdf_buf = io.BytesIO()
-            pdf_img.save(pdf_buf, format="PNG")
-            pdf_b64 = base64.b64encode(pdf_buf.getvalue()).decode()
+        # Load PDF
+        images = convert_from_bytes(pdf_file.getvalue(), dpi=150)
+        pdf_img = images[0]
 
-            reader = PdfReader(io.BytesIO(pdf_file.getvalue()))
-            page0 = reader.pages[0]
-            pdf_w = float(page0.mediabox.width)
-            pdf_h = float(page0.mediabox.height)
-            total_pages = len(reader.pages)
+        pdf_buf = io.BytesIO()
+        pdf_img.save(pdf_buf, format="PNG")
+        pdf_b64 = base64.b64encode(pdf_buf.getvalue()).decode()
 
-            st.success(f"✅ PDF loaded successfully ({total_pages} page(s))")
+        reader = PdfReader(io.BytesIO(pdf_file.getvalue()))
+        page0 = reader.pages[0]
+        pdf_w = float(page0.mediabox.width)
+        pdf_h = float(page0.mediabox.height)
+        total_pages = len(reader.pages)
 
-            # ---------- HTML Drag & Drop UI ----------
-            html = f"""
-            <html>
-            <body style="margin:0;padding:10px;background:#f4f6f8;">
-                <div style="display:flex;gap:15px;">
-                    <div style="width:220px;background:#fff;padding:10px;border-radius:8px;">
-                        <b>🖋 Drag Signature</b><br><br>
-                        <img id="sig" src="data:image/png;base64,{sig_b64}"
-                             draggable="true" style="width:100%;cursor:grab;">
-                        <br><br>
-                        <label>Size</label>
-                        <input type="range" id="size" min="30" max="200" value="100">
-                        <br><br>
-                        <button onclick="apply()">✅ Apply</button>
-                        <button onclick="clearAll()">🗑 Clear</button>
-                    </div>
+        st.success(f"✅ PDF loaded ({total_pages} page(s))")
 
-                    <div id="canvas" style="position:relative;">
-                        <img id="pdf" src="data:image/png;base64,{pdf_b64}">
-                    </div>
+        # ---------- HTML Drag & Drop UI ----------
+        html = f"""
+        <html>
+        <body style="margin:0;padding:10px;background:#f4f6f8;">
+            <div style="display:flex;gap:15px;">
+                <div style="width:220px;background:#fff;padding:10px;border-radius:8px;">
+                    <b>🖋 Drag Signature</b><br><br>
+                    <img id="sig" src="data:image/png;base64,{sig_b64}"
+                         draggable="true" style="width:100%;cursor:grab;">
+                    <br><br>
+                    <label>Size</label>
+                    <input type="range" id="size" min="30" max="200" value="100">
+                    <br><br>
+                    <button onclick="apply()">✅ Apply</button>
+                    <button onclick="clearAll()">🗑 Clear</button>
                 </div>
 
-                <script>
-                    let sigs = [];
-                    const canvas = document.getElementById("canvas");
-                    const sig = document.getElementById("sig");
-                    const size = document.getElementById("size");
-                    const pdf = document.getElementById("pdf");
+                <div id="canvas" style="position:relative;">
+                    <img id="pdf" src="data:image/png;base64,{pdf_b64}">
+                </div>
+            </div>
 
-                    sig.ondragstart = e => e.dataTransfer.setData("sig", "1");
-                    canvas.ondragover = e => e.preventDefault();
+            <script>
+                let sigs = [];
+                const canvas = document.getElementById("canvas");
+                const sig = document.getElementById("sig");
+                const size = document.getElementById("size");
+                const pdf = document.getElementById("pdf");
 
-                    canvas.ondrop = e => {{
-                        e.preventDefault();
-                        const div = document.createElement("div");
-                        div.style.position = "absolute";
-                        div.style.left = e.offsetX + "px";
-                        div.style.top = e.offsetY + "px";
-                        div.style.width = (150 * size.value / 100) + "px";
-                        div.style.cursor = "move";
+                sig.ondragstart = e => e.dataTransfer.setData("sig", "1");
+                canvas.ondragover = e => e.preventDefault();
 
-                        const img = document.createElement("img");
-                        img.src = sig.src;
-                        img.style.width = "100%";
-                        div.appendChild(img);
-                        canvas.appendChild(div);
-                        sigs.push(div);
+                canvas.ondrop = e => {{
+                    e.preventDefault();
+                    const div = document.createElement("div");
+                    div.style.position = "absolute";
+                    div.style.left = e.offsetX + "px";
+                    div.style.top = e.offsetY + "px";
+                    div.style.width = (150 * size.value / 100) + "px";
+                    div.style.cursor = "move";
 
-                        div.onmousedown = ev => {{
-                            let ox = ev.offsetX, oy = ev.offsetY;
-                            document.onmousemove = m => {{
-                                div.style.left = (m.pageX - canvas.offsetLeft - ox) + "px";
-                                div.style.top = (m.pageY - canvas.offsetTop - oy) + "px";
-                            }};
-                            document.onmouseup = () => document.onmousemove = null;
+                    const img = document.createElement("img");
+                    img.src = sig.src;
+                    img.style.width = "100%";
+                    div.appendChild(img);
+                    canvas.appendChild(div);
+                    sigs.push(div);
+
+                    div.onmousedown = ev => {{
+                        let ox = ev.offsetX, oy = ev.offsetY;
+                        document.onmousemove = m => {{
+                            div.style.left = (m.pageX - canvas.offsetLeft - ox) + "px";
+                            div.style.top = (m.pageY - canvas.offsetTop - oy) + "px";
                         }};
+                        document.onmouseup = () => document.onmousemove = null;
                     }};
+                }};
 
-                    function clearAll() {{
-                        sigs.forEach(s => s.remove());
-                        sigs = [];
-                    }}
+                function clearAll() {{
+                    sigs.forEach(s => s.remove());
+                    sigs = [];
+                }}
 
-                    function apply() {{
-                        const data = sigs.map(s => ({
-                            x: (parseFloat(s.style.left) / pdf.offsetWidth) * {pdf_w},
-                            y: (parseFloat(s.style.top) / pdf.offsetHeight) * {pdf_h},
-                            w: (parseFloat(s.offsetWidth) / pdf.offsetWidth) * {pdf_w},
-                            h: (parseFloat(s.offsetHeight) / pdf.offsetHeight) * {pdf_h}
-                        }));
-                        window.parent.postMessage(
-                            {{ type: "streamlit:setComponentValue", value: data }},
-                            "*"
-                        );
-                    }}
-                </script>
-            </body>
-            </html>
-            """
+                function apply() {{
+                    const data = sigs.map(s => ({
+                        x: (parseFloat(s.style.left) / pdf.offsetWidth) * {pdf_w},
+                        y: (parseFloat(s.style.top) / pdf.offsetHeight) * {pdf_h},
+                        w: (parseFloat(s.offsetWidth) / pdf.offsetWidth) * {pdf_w},
+                        h: (parseFloat(s.offsetHeight) / pdf.offsetHeight) * {pdf_h}
+                    }));
+                    window.parent.postMessage(
+                        {{ type: "streamlit:setComponentValue", value: data }},
+                        "*"
+                    );
+                }}
+            </script>
+        </body>
+        </html>
+        """
 
-            sig_positions = components.html(html, height=600)
+        sig_positions = components.html(html, height=600)
 
-            # ---------- DOWNLOAD ----------
-            if sig_positions:
-                apply_all = st.checkbox("Apply signature to all pages")
+        # ---------- DOWNLOAD ----------
+        if sig_positions:
+            apply_all = st.checkbox("Apply signature to all pages")
 
-                if st.button("⬇️ Download Signed PDF", use_container_width=True):
-                    writer = PdfWriter()
+            if st.button("⬇️ Download Signed PDF", use_container_width=True):
+                writer = PdfWriter()
 
-                    tmp_sig = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-                    sig_no_bg.save(tmp_sig.name)
+                tmp_sig = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+                sig_no_bg.save(tmp_sig.name)
 
-                    for i, page in enumerate(reader.pages):
-                        if i == 0 or apply_all:
-                            packet = io.BytesIO()
-                            can = canvas.Canvas(packet, pagesize=(pdf_w, pdf_h))
+                for i, page in enumerate(reader.pages):
+                    if i == 0 or apply_all:
+                        packet = io.BytesIO()
+                        can = canvas.Canvas(packet, pagesize=(pdf_w, pdf_h))
 
-                            for p in sig_positions:
-                                can.drawImage(
-                                    tmp_sig.name,
-                                    p["x"],
-                                    pdf_h - p["y"] - p["h"],
-                                    p["w"],
-                                    p["h"],
-                                    mask="auto"
-                                )
+                        for p in sig_positions:
+                            can.drawImage(
+                                tmp_sig.name,
+                                p["x"],
+                                pdf_h - p["y"] - p["h"],
+                                p["w"],
+                                p["h"],
+                                mask="auto"
+                            )
 
-                            can.save()
-                            packet.seek(0)
-                            overlay = PdfReader(packet)
-                            page.merge_page(overlay.pages[0])
+                        can.save()
+                        packet.seek(0)
+                        overlay = PdfReader(packet)
+                        page.merge_page(overlay.pages[0])
 
-                        writer.add_page(page)
+                    writer.add_page(page)
 
-                    os.unlink(tmp_sig.name)
+                os.unlink(tmp_sig.name)
 
-                    out = io.BytesIO()
-                    writer.write(out)
-                    out.seek(0)
+                out = io.BytesIO()
+                writer.write(out)
+                out.seek(0)
 
-                    st.download_button(
-                        "📥 Download Signed PDF",
-                        out,
-                        file_name="signed_document.pdf",
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
-
-        except Exception as e:
-            st.error(f"❌ Error while signing PDF: {e}")
+                st.download_button(
+                    "📥 Download Signed PDF",
+                    out,
+                    "signed_document.pdf",
+                    "application/pdf",
+                    use_container_width=True
+                )
 
     else:
         st.info("👆 Upload both PDF and signature to continue")
-
-
-
 
 #######################################################################
 
@@ -2153,6 +2150,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
