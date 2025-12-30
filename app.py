@@ -2174,11 +2174,15 @@ if feature == "✍️ Sign PDF":
         </html>
         """
 
-        sig_positions = components.html(html, height=850)
+        sig_positions = components.html(html, height=850, key="sig_component")
 
         # ---------- Download Signed PDF ----------
-        if sig_positions and isinstance(sig_positions, dict):
-            if st.button("⬇️ Download Signed PDF", type="primary", use_container_width=True):
+        st.divider()
+        st.subheader("📥 Download Section")
+        
+        if sig_positions and isinstance(sig_positions, dict) and any(sig_positions.values()):
+            st.success("✅ Signatures applied! Ready to download.")
+            if st.button("⬇️ Generate Signed PDF", type="primary", use_container_width=True):
                 with st.spinner("Generating signed PDF..."):
                     writer = PdfWriter()
 
@@ -2217,6 +2221,7 @@ if feature == "✍️ Sign PDF":
                     writer.write(out)
                     out.seek(0)
 
+                    st.success("✅ PDF signed successfully!")
                     st.download_button(
                         "📥 Download Signed PDF",
                         out,
@@ -2224,6 +2229,8 @@ if feature == "✍️ Sign PDF":
                         mime="application/pdf",
                         use_container_width=True
                     )
+        else:
+            st.info("💡 Click 'Apply Signatures' after dragging your signature onto the PDF pages above.")
 
     else:
         st.info("👆 Upload both PDF and signature to continue")
@@ -2240,6 +2247,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
