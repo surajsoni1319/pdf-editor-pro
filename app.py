@@ -1997,104 +1997,175 @@ if feature == "✍️ Sign PDF":
 
         st.success(f"✅ PDF loaded successfully ({total_pages} page(s))")
 
-        # Page selector
-        if total_pages > 1:
-            current_page = st.selectbox(
-                "📄 Select Page to Sign",
-                range(1, total_pages + 1),
-                format_func=lambda x: f"Page {x} of {total_pages}"
-            ) - 1
-        else:
-            current_page = 0
-
-        # Load PDF as image for selected page
+        # Convert ALL pages to images
         images = convert_from_bytes(pdf_file.getvalue(), dpi=150)
-        pdf_img = images[current_page]
+        
+        # Create base64 for all pages
+        pages_b64 = []
+        pages_info = []
+        
+        for i, img in enumerate(images):
+            pdf_buf = io.BytesIO()
+            img.save(pdf_buf, format="PNG")
+            pages_b64.append(base64.b64encode(pdf_buf.getvalue()).decode())
+            
+            page = reader.pages[i]
+            pages_info.append({
+                'width': float(page.mediabox.width),
+                'height': float(page.mediabox.height)
+            })
 
-        pdf_buf = io.BytesIO()
-        pdf_img.save(pdf_buf, format="PNG")
-        pdf_b64 = base64.b64encode(pdf_buf.getvalue()).decode()
+        # ---------- HTML + JS (ALL PAGES VIEW) ----------
+        pages_html = ""
+        for i, page_b64 in enumerate(pages_b64):
+            pages_html += f'''
+                <div class="page-container" data-page="{i}" style="margin-bottom:20px;border:2px solid #ddd;background:#fff;page-break-after:always;">
+                    <div style="background:#f0f0f0;padding:8px;font-weight:bold;border-bottom:1px solid #ddd;">
+                        Page {i + 1} of {total_pages}
+                    </div>
+                    <div class="canvas" data-page="{i}" style="position:relative;">
+                        <img class="pdf-page" data-page="{i}" src="data:image/png;base64,{page_b64}" style="display:block;width:100%;">
+                    </div>
+                </div>
+            '''
 
-        # Get dimensions for current page
-        page = reader.pages[current_page]
-        pdf_w = float(page.mediabox.width)
-        pdf_h = float(page.mediabox.height)
-
-        # ---------- HTML + JS (FIXED f-string escaping) ----------
         html = f"""
         <html>
-        <body style="margin:0;padding:10px;background:#f4f6f8;">
-            <div style="display:flex;gap:15px;">
-                <div style="width:220px;background:#fff;padding:10px;border-radius:8px;">
+        <head>
+            <style>
+                body {{
+                    margin:0;
+                    padding:10px;
+                    background:#f4f6f8;
+                    font-family: Arial, sans-serif;
+                }}
+                .main-container {{
+                    display:flex;
+                    gap:15px;
+                }}
+                .sidebar {{
+                    width:220px;
+                    background:#fff;
+                    padding:15px;
+                    border-radius:8px;
+                    position:sticky;
+                    top:10px;
+                    height:fit-content;
+                }}
+                .pages-container {{
+                    flex:1;
+                    max-height:800px;
+                    overflow-y:auto;
+                    padding:10px;
+                }}
+                button {{
+                    width:100%;
+                    padding:10px;
+                    margin:5px 0;
+                    border:none;
+                    border-radius:5px;
+                    cursor:pointer;
+                    font-size:14px;
+                }}
+                .btn-apply {{
+                    background:#4CAF50;
+                    color:white;
+                }}
+                .btn-clear {{
+                    background:#f44336;
+                    color:white;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="main-container">
+                <div class="sidebar">
                     <b>🖋 Drag Signature</b><br><br>
                     <img id="sig" src="data:image/png;base64,{sig_b64}"
-                         draggable="true" style="width:100%;cursor:grab;">
+                         draggable="true" style="width:100%;cursor:grab;border:1px solid #ddd;">
                     <br><br>
-                    <label>Size</label>
-                    <input type="range" id="size" min="30" max="200" value="100">
+                    <label><b>Size</b></label><br>
+                    <input type="range" id="size" min="30" max="200" value="100" style="width:100%;">
                     <br><br>
-                    <button onclick="apply()">✅ Apply</button>
-                    <button onclick="clearAll()">🗑 Clear</button>
+                    <button class="btn-apply" onclick="apply()">✅ Apply Signatures</button>
+                    <button class="btn-clear" onclick="clearAll()">🗑 Clear All</button>
                 </div>
 
-                <div id="canvas" style="position:relative;max-height:700px;overflow:auto;border:1px solid #ddd;background:#fff;">
-                    <img id="pdf" src="data:image/png;base64,{pdf_b64}" style="display:block;max-width:100%;">
+                <div class="pages-container">
+                    {pages_html}
                 </div>
             </div>
 
             <script>
-                let sigs = [];
-                const canvas = document.getElementById("canvas");
+                let allSignatures = {{}};
                 const sig = document.getElementById("sig");
                 const size = document.getElementById("size");
-                const pdf = document.getElementById("pdf");
+                const canvases = document.querySelectorAll(".canvas");
 
                 sig.ondragstart = e => e.dataTransfer.setData("sig", "1");
-                canvas.ondragover = e => e.preventDefault();
 
-                canvas.ondrop = e => {{
-                    e.preventDefault();
-                    const div = document.createElement("div");
-                    div.style.position = "absolute";
-                    div.style.left = e.offsetX + "px";
-                    div.style.top = e.offsetY + "px";
-                    div.style.width = (150 * size.value / 100) + "px";
-                    div.style.cursor = "move";
+                canvases.forEach(canvas => {{
+                    const pageNum = canvas.getAttribute("data-page");
+                    allSignatures[pageNum] = [];
 
-                    const img = document.createElement("img");
-                    img.src = sig.src;
-                    img.style.width = "100%";
-                    div.appendChild(img);
-                    canvas.appendChild(div);
-                    sigs.push(div);
+                    canvas.ondragover = e => e.preventDefault();
 
-                    div.onmousedown = ev => {{
-                        let ox = ev.offsetX, oy = ev.offsetY;
-                        document.onmousemove = m => {{
-                            div.style.left = (m.pageX - canvas.offsetLeft - ox) + "px";
-                            div.style.top = (m.pageY - canvas.offsetTop - oy) + "px";
+                    canvas.ondrop = e => {{
+                        e.preventDefault();
+                        const div = document.createElement("div");
+                        div.style.position = "absolute";
+                        div.style.left = e.offsetX + "px";
+                        div.style.top = e.offsetY + "px";
+                        div.style.width = (150 * size.value / 100) + "px";
+                        div.style.cursor = "move";
+                        div.style.zIndex = "10";
+
+                        const img = document.createElement("img");
+                        img.src = sig.src;
+                        img.style.width = "100%";
+                        div.appendChild(img);
+                        canvas.appendChild(div);
+                        allSignatures[pageNum].push(div);
+
+                        div.onmousedown = ev => {{
+                            let ox = ev.offsetX, oy = ev.offsetY;
+                            document.onmousemove = m => {{
+                                div.style.left = (m.pageX - canvas.offsetLeft - ox) + "px";
+                                div.style.top = (m.pageY - canvas.offsetTop - oy) + "px";
+                            }};
+                            document.onmouseup = () => document.onmousemove = null;
                         }};
-                        document.onmouseup = () => document.onmousemove = null;
                     }};
-                }};
+                }});
 
                 function clearAll() {{
-                    sigs.forEach(s => s.remove());
-                    sigs = [];
+                    Object.keys(allSignatures).forEach(pageNum => {{
+                        allSignatures[pageNum].forEach(s => s.remove());
+                        allSignatures[pageNum] = [];
+                    }});
                 }}
 
                 function apply() {{
-                    const data = sigs.map(function(s) {{
-                        return {{
-                            x: (parseFloat(s.style.left) / pdf.offsetWidth) * {pdf_w},
-                            y: (parseFloat(s.style.top) / pdf.offsetHeight) * {pdf_h},
-                            w: (parseFloat(s.offsetWidth) / pdf.offsetWidth) * {pdf_w},
-                            h: (parseFloat(s.offsetHeight) / pdf.offsetHeight) * {pdf_h}
-                        }};
+                    const pagesInfo = {pages_info};
+                    const result = {{}};
+
+                    Object.keys(allSignatures).forEach(pageNum => {{
+                        const canvas = document.querySelector('.canvas[data-page="' + pageNum + '"]');
+                        const pdfImg = canvas.querySelector('.pdf-page');
+                        const pageInfo = pagesInfo[parseInt(pageNum)];
+
+                        result[pageNum] = allSignatures[pageNum].map(function(s) {{
+                            return {{
+                                x: (parseFloat(s.style.left) / pdfImg.offsetWidth) * pageInfo.width,
+                                y: (parseFloat(s.style.top) / pdfImg.offsetHeight) * pageInfo.height,
+                                w: (parseFloat(s.offsetWidth) / pdfImg.offsetWidth) * pageInfo.width,
+                                h: (parseFloat(s.offsetHeight) / pdfImg.offsetHeight) * pageInfo.height
+                            }};
+                        }});
                     }});
 
                     window.parent.postMessage(
-                        {{ type: "streamlit:setComponentValue", value: data }},
+                        {{ type: "streamlit:setComponentValue", value: result }},
                         "*"
                     );
                 }}
@@ -2103,13 +2174,11 @@ if feature == "✍️ Sign PDF":
         </html>
         """
 
-        sig_positions = components.html(html, height=600)
+        sig_positions = components.html(html, height=850)
 
         # ---------- Download Signed PDF ----------
-        if sig_positions and isinstance(sig_positions, list) and len(sig_positions) > 0:
-            apply_all = st.checkbox("Apply signature to all pages")
-
-            if st.button("⬇️ Download Signed PDF", use_container_width=True):
+        if sig_positions and isinstance(sig_positions, dict):
+            if st.button("⬇️ Download Signed PDF", type="primary", use_container_width=True):
                 with st.spinner("Generating signed PDF..."):
                     writer = PdfWriter()
 
@@ -2117,13 +2186,15 @@ if feature == "✍️ Sign PDF":
                     sig_no_bg.save(tmp_sig.name)
 
                     for i, page in enumerate(reader.pages):
-                        if i == current_page or apply_all:
+                        page_signatures = sig_positions.get(str(i), [])
+                        
+                        if page_signatures:
                             packet = io.BytesIO()
                             page_w = float(page.mediabox.width)
                             page_h = float(page.mediabox.height)
                             can = canvas.Canvas(packet, pagesize=(page_w, page_h))
 
-                            for p in sig_positions:
+                            for p in page_signatures:
                                 can.drawImage(
                                     tmp_sig.name,
                                     p["x"],
@@ -2169,6 +2240,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
