@@ -1935,6 +1935,9 @@ elif feature == "🔀 Reorder Pages":
 # ======================================================
 # Feature: Sign PDF 
 # ======================================================
+# ======================================================
+# Feature: Sign PDF (FINAL – STABLE)
+# ======================================================
 if feature == "✍️ Sign PDF":
 
     import streamlit as st
@@ -2034,8 +2037,8 @@ if feature == "✍️ Sign PDF":
                     <button onclick="clearAll()">🗑 Clear</button>
                 </div>
 
-                <div id="canvas" style="position:relative;">
-                    <img id="pdf" src="data:image/png;base64,{pdf_b64}">
+                <div id="canvas" style="position:relative;max-height:700px;overflow:auto;border:1px solid #ddd;background:#fff;">
+                    <img id="pdf" src="data:image/png;base64,{pdf_b64}" style="display:block;max-width:100%;">
                 </div>
             </div>
 
@@ -2103,54 +2106,56 @@ if feature == "✍️ Sign PDF":
         sig_positions = components.html(html, height=600)
 
         # ---------- Download Signed PDF ----------
-        if sig_positions:
+        if sig_positions and isinstance(sig_positions, list) and len(sig_positions) > 0:
             apply_all = st.checkbox("Apply signature to all pages")
 
             if st.button("⬇️ Download Signed PDF", use_container_width=True):
-                writer = PdfWriter()
+                with st.spinner("Generating signed PDF..."):
+                    writer = PdfWriter()
 
-                tmp_sig = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-                sig_no_bg.save(tmp_sig.name)
+                    tmp_sig = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+                    sig_no_bg.save(tmp_sig.name)
 
-                for i, page in enumerate(reader.pages):
-                    if i == 0 or apply_all:
-                        packet = io.BytesIO()
-                        can = canvas.Canvas(packet, pagesize=(pdf_w, pdf_h))
+                    for i, page in enumerate(reader.pages):
+                        if i == current_page or apply_all:
+                            packet = io.BytesIO()
+                            page_w = float(page.mediabox.width)
+                            page_h = float(page.mediabox.height)
+                            can = canvas.Canvas(packet, pagesize=(page_w, page_h))
 
-                        for p in sig_positions:
-                            can.drawImage(
-                                tmp_sig.name,
-                                p["x"],
-                                pdf_h - p["y"] - p["h"],
-                                p["w"],
-                                p["h"],
-                                mask="auto"
-                            )
+                            for p in sig_positions:
+                                can.drawImage(
+                                    tmp_sig.name,
+                                    p["x"],
+                                    page_h - p["y"] - p["h"],
+                                    p["w"],
+                                    p["h"],
+                                    mask="auto"
+                                )
 
-                        can.save()
-                        packet.seek(0)
-                        overlay = PdfReader(packet)
-                        page.merge_page(overlay.pages[0])
+                            can.save()
+                            packet.seek(0)
+                            overlay = PdfReader(packet)
+                            page.merge_page(overlay.pages[0])
 
-                    writer.add_page(page)
+                        writer.add_page(page)
 
-                os.unlink(tmp_sig.name)
+                    os.unlink(tmp_sig.name)
 
-                out = io.BytesIO()
-                writer.write(out)
-                out.seek(0)
+                    out = io.BytesIO()
+                    writer.write(out)
+                    out.seek(0)
 
-                st.download_button(
-                    "📥 Download Signed PDF",
-                    out,
-                    file_name="signed_document.pdf",
-                    mime="application/pdf",
-                    use_container_width=True
-                )
+                    st.download_button(
+                        "📥 Download Signed PDF",
+                        out,
+                        file_name="signed_document.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
 
     else:
         st.info("👆 Upload both PDF and signature to continue")
-
 
 #######################################################################
 
@@ -2164,6 +2169,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
