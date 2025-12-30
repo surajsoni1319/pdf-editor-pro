@@ -2193,11 +2193,12 @@ if feature == "✍️ Sign PDF":
         </html>
         """
 
-        sig_positions = components.html(html, height=850, key="sig_component")
+        sig_positions = components.html(html, height=850)
 
         # Store in session state when received
         if sig_positions and isinstance(sig_positions, dict):
             st.session_state.signatures_applied = sig_positions
+            st.rerun()
 
         # ---------- Download Signed PDF ----------
         st.divider()
@@ -2269,6 +2270,10 @@ if feature == "✍️ Sign PDF":
         if 'signatures_applied' in st.session_state:
             st.session_state.signatures_applied = None
 
+
+
+
+
 #######################################################################
 
 
@@ -2281,6 +2286,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
