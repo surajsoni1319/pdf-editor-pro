@@ -1936,7 +1936,7 @@ elif feature == "🔀 Reorder Pages":
 # Feature: Sign PDF 
 # ======================================================
 # ======================================================
-# Feature: Sign PDF (FINAL – UPLOAD FIXED)
+# Feature: Sign PDF (FINAL – STABLE)
 # ======================================================
 if feature == "✍️ Sign PDF":
 
@@ -1961,7 +1961,7 @@ if feature == "✍️ Sign PDF":
         data[mask, 3] = 0
         return Image.fromarray(data)
 
-    # ---------- UPLOAD SECTION (ALWAYS VISIBLE) ----------
+    # ---------- Upload Section (ALWAYS visible) ----------
     col1, col2 = st.columns(2)
 
     with col1:
@@ -1980,7 +1980,7 @@ if feature == "✍️ Sign PDF":
 
     st.divider()
 
-    # ---------- PROCESS ONLY AFTER BOTH FILES ----------
+    # ---------- Process ONLY when both files exist ----------
     if pdf_file and sig_file:
 
         # Process signature
@@ -1991,7 +1991,7 @@ if feature == "✍️ Sign PDF":
         sig_no_bg.save(sig_buf, format="PNG")
         sig_b64 = base64.b64encode(sig_buf.getvalue()).decode()
 
-        # Load PDF
+        # Load PDF as image
         images = convert_from_bytes(pdf_file.getvalue(), dpi=150)
         pdf_img = images[0]
 
@@ -1999,15 +1999,16 @@ if feature == "✍️ Sign PDF":
         pdf_img.save(pdf_buf, format="PNG")
         pdf_b64 = base64.b64encode(pdf_buf.getvalue()).decode()
 
+        # Read PDF info
         reader = PdfReader(io.BytesIO(pdf_file.getvalue()))
         page0 = reader.pages[0]
         pdf_w = float(page0.mediabox.width)
         pdf_h = float(page0.mediabox.height)
         total_pages = len(reader.pages)
 
-        st.success(f"✅ PDF loaded ({total_pages} page(s))")
+        st.success(f"✅ PDF loaded successfully ({total_pages} page(s))")
 
-        # ---------- HTML Drag & Drop UI ----------
+        # ---------- HTML + JS (FIXED f-string escaping) ----------
         html = f"""
         <html>
         <body style="margin:0;padding:10px;background:#f4f6f8;">
@@ -2071,12 +2072,13 @@ if feature == "✍️ Sign PDF":
                 }}
 
                 function apply() {{
-                    const data = sigs.map(s => ({
+                    const data = sigs.map(s => ({{   // IMPORTANT: double {{ }}
                         x: (parseFloat(s.style.left) / pdf.offsetWidth) * {pdf_w},
                         y: (parseFloat(s.style.top) / pdf.offsetHeight) * {pdf_h},
                         w: (parseFloat(s.offsetWidth) / pdf.offsetWidth) * {pdf_w},
                         h: (parseFloat(s.offsetHeight) / pdf.offsetHeight) * {pdf_h}
-                    }));
+                    }}));
+
                     window.parent.postMessage(
                         {{ type: "streamlit:setComponentValue", value: data }},
                         "*"
@@ -2089,7 +2091,7 @@ if feature == "✍️ Sign PDF":
 
         sig_positions = components.html(html, height=600)
 
-        # ---------- DOWNLOAD ----------
+        # ---------- Download Signed PDF ----------
         if sig_positions:
             apply_all = st.checkbox("Apply signature to all pages")
 
@@ -2130,13 +2132,8 @@ if feature == "✍️ Sign PDF":
                 st.download_button(
                     "📥 Download Signed PDF",
                     out,
-                    "signed_document.pdf",
-                    "application/pdf",
-                    use_container_width=True
-                )
+                    file_name="signed_document.pdf",
 
-    else:
-        st.info("👆 Upload both PDF and signature to continue")
 
 #######################################################################
 
@@ -2150,6 +2147,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
