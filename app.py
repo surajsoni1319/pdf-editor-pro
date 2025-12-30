@@ -1933,9 +1933,6 @@ elif feature == "🔀 Reorder Pages":
 
 
 # ======================================================
-# Feature: Sign PDF 
-# ======================================================
-# ======================================================
 # Feature: Sign PDF (Click to Place) – FIXED & STABLE
 # ======================================================
 if feature == "✍️ Sign PDF (Click to Place)":
@@ -2138,6 +2135,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
