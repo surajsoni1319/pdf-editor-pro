@@ -1954,7 +1954,6 @@ elif feature == "✍️ Sign PDF (Click to Place)":
     import tempfile
     import base64
     import os
-    import json
 
     # --------------------------------------------------
     # Background removal
@@ -1974,16 +1973,23 @@ elif feature == "✍️ Sign PDF (Click to Place)":
         return Image.fromarray(data)
 
     # --------------------------------------------------
-    # File uploads
+    # IMPORTANT: File uploads BEFORE everything else
     # --------------------------------------------------
+    st.subheader("📂 Upload Files")
+    
     col1, col2 = st.columns(2)
 
     with col1:
-        pdf_file = st.file_uploader("📄 Upload PDF", type=["pdf"], key="pdf_sign")
+        pdf_file = st.file_uploader("📄 Upload PDF Document", type=["pdf"], key="pdf_sign")
         
     with col2:
-        sig_file = st.file_uploader("✍️ Upload Signature (PNG/JPG)", type=["png", "jpg", "jpeg"], key="sig_sign")
+        sig_file = st.file_uploader("✍️ Upload Signature Image", type=["png", "jpg", "jpeg"], key="sig_sign")
 
+    st.divider()
+
+    # --------------------------------------------------
+    # Only show interactive editor if both files uploaded
+    # --------------------------------------------------
     if pdf_file and sig_file:
         try:
             # Process signature
@@ -1996,7 +2002,7 @@ elif feature == "✍️ Sign PDF (Click to Place)":
             sig_base64 = base64.b64encode(sig_buffer.getvalue()).decode()
 
             # Convert PDF first page to image
-            with st.spinner("Loading PDF..."):
+            with st.spinner("📄 Loading PDF preview..."):
                 images = convert_from_bytes(pdf_file.getvalue(), dpi=150)
                 page_image = images[0]
 
@@ -2012,7 +2018,7 @@ elif feature == "✍️ Sign PDF (Click to Place)":
             pdf_height = float(first_page.mediabox.height)
             total_pages = len(reader.pages)
 
-            st.info(f"📄 PDF loaded: {total_pages} pages | Dimensions: {pdf_width:.0f} x {pdf_height:.0f} points")
+            st.success(f"✅ Files loaded successfully! PDF has {total_pages} page(s)")
 
             # Interactive drag & drop component
             html_code = f"""
@@ -2026,60 +2032,92 @@ elif feature == "✍️ Sign PDF (Click to Place)":
                         box-sizing: border-box;
                     }}
                     body {{
-                        font-family: Arial, sans-serif;
-                        background: #f5f5f5;
-                        padding: 20px;
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+                        background: #f8f9fa;
+                        padding: 15px;
                     }}
                     .container {{
                         display: grid;
-                        grid-template-columns: 200px 1fr;
-                        gap: 20px;
-                        max-width: 1400px;
-                        margin: 0 auto;
+                        grid-template-columns: 220px 1fr;
+                        gap: 15px;
+                        max-width: 100%;
                     }}
                     .sidebar {{
                         background: white;
                         padding: 15px;
-                        border-radius: 10px;
-                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                        border-radius: 12px;
+                        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                        height: fit-content;
+                    }}
+                    .sidebar h3 {{
+                        font-size: 14px;
+                        margin-bottom: 12px;
+                        color: #333;
                     }}
                     .signature-preview {{
-                        background: #f8f9fa;
+                        background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
                         border: 2px dashed #667eea;
-                        border-radius: 8px;
-                        padding: 10px;
+                        border-radius: 10px;
+                        padding: 12px;
                         text-align: center;
                         margin-bottom: 15px;
+                        transition: all 0.3s;
+                    }}
+                    .signature-preview:hover {{
+                        border-color: #764ba2;
+                        transform: translateY(-2px);
+                    }}
+                    .signature-preview p {{
+                        font-size: 11px;
+                        font-weight: 600;
+                        margin-bottom: 8px;
+                        color: #667eea;
                     }}
                     .signature-preview img {{
                         max-width: 100%;
                         height: auto;
                         cursor: grab;
+                        border-radius: 6px;
+                        background: white;
+                        padding: 5px;
                     }}
                     .signature-preview img:active {{
                         cursor: grabbing;
                     }}
                     .controls {{
                         background: #f8f9fa;
-                        padding: 10px;
-                        border-radius: 8px;
-                        margin-bottom: 10px;
+                        padding: 12px;
+                        border-radius: 10px;
+                        margin-bottom: 12px;
                     }}
                     .controls label {{
                         display: block;
                         font-size: 12px;
                         font-weight: 600;
-                        margin-bottom: 5px;
+                        margin-bottom: 6px;
+                        color: #495057;
                     }}
                     .controls input[type="range"] {{
                         width: 100%;
+                        height: 6px;
+                        border-radius: 5px;
+                        background: #dee2e6;
+                        outline: none;
+                    }}
+                    .controls input[type="range"]::-webkit-slider-thumb {{
+                        width: 16px;
+                        height: 16px;
+                        border-radius: 50%;
+                        background: #667eea;
+                        cursor: pointer;
                     }}
                     .btn {{
                         width: 100%;
                         padding: 10px;
                         border: none;
-                        border-radius: 5px;
+                        border-radius: 8px;
                         font-weight: 600;
+                        font-size: 13px;
                         cursor: pointer;
                         margin-bottom: 8px;
                         transition: all 0.3s;
@@ -2090,6 +2128,7 @@ elif feature == "✍️ Sign PDF (Click to Place)":
                     }}
                     .btn-clear:hover {{
                         background: #c82333;
+                        transform: translateY(-1px);
                     }}
                     .btn-apply {{
                         background: #28a745;
@@ -2097,31 +2136,42 @@ elif feature == "✍️ Sign PDF (Click to Place)":
                     }}
                     .btn-apply:hover {{
                         background: #218838;
+                        transform: translateY(-1px);
                     }}
                     .instructions {{
                         background: #fff3cd;
+                        border: 1px solid #ffc107;
                         padding: 10px;
-                        border-radius: 5px;
+                        border-radius: 8px;
                         font-size: 11px;
                         color: #856404;
                     }}
+                    .instructions strong {{
+                        display: block;
+                        margin-bottom: 6px;
+                    }}
                     .instructions ul {{
-                        margin-left: 15px;
+                        margin-left: 18px;
                         margin-top: 5px;
+                    }}
+                    .instructions li {{
+                        margin-bottom: 3px;
                     }}
                     .canvas-area {{
                         background: white;
                         padding: 20px;
-                        border-radius: 10px;
-                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                        border-radius: 12px;
+                        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
                         display: flex;
                         justify-content: center;
+                        align-items: flex-start;
                         overflow: auto;
                     }}
                     #pdfCanvas {{
                         position: relative;
-                        background: white;
-                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                        border-radius: 8px;
+                        overflow: hidden;
                     }}
                     #pdfCanvas img {{
                         display: block;
@@ -2133,37 +2183,46 @@ elif feature == "✍️ Sign PDF (Click to Place)":
                         cursor: move;
                         border: 2px dashed #667eea;
                         background: rgba(102, 126, 234, 0.1);
-                        padding: 3px;
+                        padding: 4px;
+                        border-radius: 4px;
+                        transition: all 0.2s;
                     }}
                     .signature-on-canvas:hover {{
                         border-color: #764ba2;
                         background: rgba(118, 75, 162, 0.15);
+                        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
                     }}
                     .signature-on-canvas img {{
                         width: 100%;
                         height: 100%;
                         display: block;
+                        pointer-events: none;
                     }}
                     .resize-handle {{
                         position: absolute;
                         bottom: -8px;
                         right: -8px;
-                        width: 16px;
-                        height: 16px;
+                        width: 18px;
+                        height: 18px;
                         background: #667eea;
                         border-radius: 50%;
                         cursor: nwse-resize;
-                        border: 2px solid white;
+                        border: 3px solid white;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    }}
+                    .resize-handle:hover {{
+                        background: #764ba2;
+                        transform: scale(1.1);
                     }}
                     .delete-btn {{
                         position: absolute;
-                        top: -8px;
-                        right: -8px;
-                        width: 20px;
-                        height: 20px;
+                        top: -10px;
+                        right: -10px;
+                        width: 22px;
+                        height: 22px;
                         background: #dc3545;
                         color: white;
-                        border: 2px solid white;
+                        border: 3px solid white;
                         border-radius: 50%;
                         cursor: pointer;
                         display: flex;
@@ -2171,6 +2230,11 @@ elif feature == "✍️ Sign PDF (Click to Place)":
                         justify-content: center;
                         font-weight: bold;
                         font-size: 14px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    }}
+                    .delete-btn:hover {{
+                        background: #c82333;
+                        transform: scale(1.1);
                     }}
                 </style>
             </head>
@@ -2178,25 +2242,26 @@ elif feature == "✍️ Sign PDF (Click to Place)":
                 <div class="container">
                     <div class="sidebar">
                         <div class="signature-preview">
-                            <p style="font-size: 12px; font-weight: 600; margin-bottom: 8px;">🖋️ Signature</p>
+                            <p>🖋️ DRAG ME TO PDF</p>
                             <img id="signaturePreview" src="data:image/png;base64,{sig_base64}" draggable="true">
                         </div>
 
                         <div class="controls">
-                            <label>Size: <span id="sizeValue">100</span>%</label>
+                            <label>Default Size: <span id="sizeValue">100</span>%</label>
                             <input type="range" id="sizeSlider" min="30" max="250" value="100">
                         </div>
 
                         <button class="btn btn-clear" onclick="clearSignatures()">🗑️ Clear All</button>
-                        <button class="btn btn-apply" onclick="applySignatures()">✅ Apply to PDF</button>
+                        <button class="btn btn-apply" onclick="applySignatures()">✅ Apply Positions</button>
 
                         <div class="instructions">
-                            <strong>📋 Instructions:</strong>
+                            <strong>📋 How to Use:</strong>
                             <ul>
                                 <li>Drag signature to PDF</li>
-                                <li>Move by dragging</li>
-                                <li>Resize with corner handle</li>
-                                <li>Click X to remove</li>
+                                <li>Click & drag to move</li>
+                                <li>Resize with ⚫ handle</li>
+                                <li>Remove with ✕ button</li>
+                                <li>Click "Apply" when done</li>
                             </ul>
                         </div>
                     </div>
@@ -2278,15 +2343,12 @@ elif feature == "✍️ Sign PDF (Click to Place)":
                                 offsetX = e.clientX - rect.left - sigDiv.offsetLeft;
                                 offsetY = e.clientY - rect.top - sigDiv.offsetTop;
                             }}
+                            e.stopPropagation();
                         }});
 
                         pdfCanvas.appendChild(sigDiv);
                         signatures.push({{
-                            element: sigDiv,
-                            x: parseFloat(sigDiv.style.left),
-                            y: parseFloat(sigDiv.style.top),
-                            width: parseFloat(sigDiv.style.width),
-                            height: parseFloat(sigDiv.style.height)
+                            element: sigDiv
                         }});
                     }}
 
@@ -2350,16 +2412,18 @@ elif feature == "✍️ Sign PDF (Click to Place)":
             """
 
             # Render the interactive component
-            signature_positions = components.html(html_code, height=700, scrolling=True)
+            st.subheader("🎨 Interactive Editor")
+            signature_positions = components.html(html_code, height=650, scrolling=True)
 
             # Process and download
-            if signature_positions:
-                st.success(f"✅ {len(signature_positions)} signature(s) positioned!")
+            if signature_positions and len(signature_positions) > 0:
+                st.divider()
+                st.success(f"✅ {len(signature_positions)} signature(s) positioned on PDF!")
                 
-                apply_all_pages = st.checkbox(f"Apply to all {total_pages} pages", value=False)
+                apply_all_pages = st.checkbox(f"📄 Apply signature to all {total_pages} pages", value=False)
 
-                if st.button("⬇️ Download Signed PDF", type="primary", use_container_width=True):
-                    with st.spinner("Creating signed PDF..."):
+                if st.button("⬇️ Generate & Download Signed PDF", type="primary", use_container_width=True):
+                    with st.spinner("🔄 Creating your signed PDF..."):
                         try:
                             reader = PdfReader(io.BytesIO(pdf_file.getvalue()))
                             writer = PdfWriter()
@@ -2404,8 +2468,10 @@ elif feature == "✍️ Sign PDF (Click to Place)":
                             writer.write(output)
                             output.seek(0)
 
+                            st.success("🎉 PDF signed successfully!")
+                            
                             st.download_button(
-                                "📥 Download Signed PDF",
+                                "📥 Click Here to Download Signed PDF",
                                 output,
                                 file_name="signed_document.pdf",
                                 mime="application/pdf",
@@ -2413,13 +2479,24 @@ elif feature == "✍️ Sign PDF (Click to Place)":
                             )
 
                         except Exception as e:
-                            st.error(f"❌ Error: {str(e)}")
+                            st.error(f"❌ Error creating PDF: {str(e)}")
+                            import traceback
+                            with st.expander("Show error details"):
+                                st.code(traceback.format_exc())
 
         except Exception as e:
             st.error(f"❌ Error loading files: {str(e)}")
+            import traceback
+            with st.expander("Show error details"):
+                st.code(traceback.format_exc())
     else:
-        st.info("👆 Upload both PDF and signature to get started")
-
+        st.info("👆 **Please upload both files to continue:**")
+        st.markdown("""
+        - 📄 **PDF Document** - The file you want to sign
+        - ✍️ **Signature Image** - Your signature (PNG or JPG format)
+        
+        💡 **Tip:** Make sure your signature has a white background for best results!
+        """)
 
 #######################################################################
 
@@ -2433,49 +2510,4 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
