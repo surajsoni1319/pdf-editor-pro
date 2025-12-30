@@ -1935,245 +1935,490 @@ elif feature == "🔀 Reorder Pages":
 # ======================================================
 # Feature: Sign PDF 
 # ======================================================
+
 # ======================================================
-# PDF Signature Tool – Click to Place + Slider Fine Tune
+# Feature: Sign PDF (Drag & Drop Signature)
 # ======================================================
-import streamlit as st
-from pypdf import PdfReader, PdfWriter
-from pdf2image import convert_from_bytes
-from reportlab.pdfgen import canvas
-from PIL import Image
-import streamlit.components.v1 as components
-import numpy as np
-import io
-import tempfile
-import os
-import base64
+elif feature == "✍️ Sign PDF (Click to Place)":
 
-# --------------------------------------------------
-# Page config
-# --------------------------------------------------
-st.set_page_config(
-    page_title="PDF Signature Tool",
-    page_icon="✍️",
-    layout="wide"
-)
+    st.header("✍️ Sign PDF – Drag & Drop Signature")
+    st.write("Drag your signature onto the PDF and place it exactly where you need it.")
 
-st.title("✍️ PDF Signature Tool")
-st.write("Click on the PDF to place your signature. Use sliders for fine adjustment.")
-
-# --------------------------------------------------
-# Helpers
-# --------------------------------------------------
-def remove_signature_background(sig_image: Image.Image, threshold: int = 230) -> Image.Image:
-    sig = sig_image.convert("RGBA")
-    data = np.array(sig)
-
-    r = data[:, :, 0]
-    g = data[:, :, 1]
-    b = data[:, :, 2]
-
-    white_bg = (r > threshold) & (g > threshold) & (b > threshold)
-    data[white_bg, 3] = 0
-
-    return Image.fromarray(data)
-
-def pil_to_base64(img: Image.Image) -> str:
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    return base64.b64encode(buf.getvalue()).decode()
-
-# --------------------------------------------------
-# Session state init
-# --------------------------------------------------
-if "signature_click" not in st.session_state:
-    st.session_state.signature_click = None
-
-# --------------------------------------------------
-# Uploads
-# --------------------------------------------------
-col1, col2 = st.columns(2)
-with col1:
-    pdf_file = st.file_uploader("📄 Upload PDF", type=["pdf"])
-with col2:
-    sig_file = st.file_uploader("✍️ Upload Signature (PNG / JPG)", type=["png", "jpg", "jpeg"])
-
-# --------------------------------------------------
-# Main logic
-# --------------------------------------------------
-if pdf_file and sig_file:
-
-    # Signature processing
-    sig_image = Image.open(sig_file)
-    sig_no_bg = remove_signature_background(sig_image)
-
-    st.subheader("🖋️ Signature Preview")
-    st.image(sig_no_bg, width=300)
-
-    # PDF preview
-    images = convert_from_bytes(pdf_file.getvalue(), dpi=150)
-    page_image = images[0]
-    img_b64 = pil_to_base64(page_image)
-
-    reader = PdfReader(io.BytesIO(pdf_file.getvalue()))
-    first_page = reader.pages[0]
-    pdf_width = float(first_page.mediabox.width)
-    pdf_height = float(first_page.mediabox.height)
-    total_pages = len(reader.pages)
-
-    st.divider()
-    st.subheader("📄 Click on PDF to place signature")
+    from pypdf import PdfReader, PdfWriter
+    from pdf2image import convert_from_bytes
+    from reportlab.pdfgen import canvas
+    from PIL import Image
+    import streamlit.components.v1 as components
+    import numpy as np
+    import io
+    import tempfile
+    import base64
+    import os
+    import json
 
     # --------------------------------------------------
-    # CLICK CAPTURE (HTML → JS → session_state)
+    # Background removal
     # --------------------------------------------------
-    components.html(
-        f"""
-        <html>
-        <body style="margin:0">
-          <img src="data:image/png;base64,{img_b64}"
-               style="width:100%; cursor:crosshair;"
-               onclick="send(event)" />
-          <script>
-            function send(e) {{
-              const r = e.target.getBoundingClientRect();
-              const data = {{
-                x: e.clientX - r.left,
-                y: e.clientY - r.top,
-                w: r.width,
-                h: r.height
-              }};
-              window.parent.postMessage(
-                {{ type: "signature_click", payload: data }},
-                "*"
-              );
-            }}
-          </script>
-        </body>
-        </html>
-        """,
-        height=int(page_image.size[1] * 0.8),
-    )
+    def remove_signature_background(sig_image: Image.Image, threshold: int = 230) -> Image.Image:
+        """Remove white background from signature image"""
+        sig = sig_image.convert("RGBA")
+        data = np.array(sig)
 
-    # JS listener (GLOBAL)
-    components.html("""
-    <script>
-    window.addEventListener("message", (e) => {
-      if (e.data && e.data.type === "signature_click") {
-        window.Streamlit.setComponentValue(e.data.payload);
-      }
-    });
-    </script>
-    """, height=0)
+        r = data[:, :, 0]
+        g = data[:, :, 1]
+        b = data[:, :, 2]
+
+        white_bg = (r > threshold) & (g > threshold) & (b > threshold)
+        data[white_bg, 3] = 0
+
+        return Image.fromarray(data)
 
     # --------------------------------------------------
-    # Handle click safely
+    # File uploads
     # --------------------------------------------------
-    click_payload = st.session_state.get("signature_click")
+    col1, col2 = st.columns(2)
 
-    if isinstance(click_payload, dict):
-        st.success(
-            f"📍 Clicked at X={int(click_payload['x'])}, "
-            f"Y={int(click_payload['y'])}"
-        )
+    with col1:
+        pdf_file = st.file_uploader("📄 Upload PDF", type=["pdf"], key="pdf_sign")
+        
+    with col2:
+        sig_file = st.file_uploader("✍️ Upload Signature (PNG/JPG)", type=["png", "jpg", "jpeg"], key="sig_sign")
 
-        st.session_state["x_percent"] = int(
-            (click_payload["x"] / click_payload["w"]) * 100
-        )
-        st.session_state["y_percent"] = int(
-            (click_payload["y"] / click_payload["h"]) * 100
-        )
+    if pdf_file and sig_file:
+        try:
+            # Process signature
+            sig_image = Image.open(sig_file)
+            sig_no_bg = remove_signature_background(sig_image)
 
-    st.divider()
-    st.subheader("📍 Fine Tune Position & Size")
+            # Convert signature to base64
+            sig_buffer = io.BytesIO()
+            sig_no_bg.save(sig_buffer, format='PNG')
+            sig_base64 = base64.b64encode(sig_buffer.getvalue()).decode()
 
-    # Sliders
-    x_percent = st.slider(
-        "Horizontal Position (%)",
-        0, 100,
-        st.session_state.get("x_percent", 50)
-    )
+            # Convert PDF first page to image
+            with st.spinner("Loading PDF..."):
+                images = convert_from_bytes(pdf_file.getvalue(), dpi=150)
+                page_image = images[0]
 
-    y_percent = st.slider(
-        "Vertical Position (%)",
-        0, 100,
-        st.session_state.get("y_percent", 80)
-    )
+            # Convert PDF image to base64
+            pdf_buffer = io.BytesIO()
+            page_image.save(pdf_buffer, format='PNG')
+            pdf_base64 = base64.b64encode(pdf_buffer.getvalue()).decode()
 
-    scale = st.slider("Signature Size (%)", 25, 300, 100)
+            # Get PDF dimensions
+            reader = PdfReader(io.BytesIO(pdf_file.getvalue()))
+            first_page = reader.pages[0]
+            pdf_width = float(first_page.mediabox.width)
+            pdf_height = float(first_page.mediabox.height)
+            total_pages = len(reader.pages)
 
-    apply_all = st.checkbox(
-        f"Apply signature to all {total_pages} pages",
-        value=False
-    )
+            st.info(f"📄 PDF loaded: {total_pages} pages | Dimensions: {pdf_width:.0f} x {pdf_height:.0f} points")
 
-    # Convert to PDF coordinates
-    x_pdf = (x_percent / 100) * pdf_width
-    y_pdf = pdf_height - ((y_percent / 100) * pdf_height)
+            # Interactive drag & drop component
+            html_code = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    * {{
+                        margin: 0;
+                        padding: 0;
+                        box-sizing: border-box;
+                    }}
+                    body {{
+                        font-family: Arial, sans-serif;
+                        background: #f5f5f5;
+                        padding: 20px;
+                    }}
+                    .container {{
+                        display: grid;
+                        grid-template-columns: 200px 1fr;
+                        gap: 20px;
+                        max-width: 1400px;
+                        margin: 0 auto;
+                    }}
+                    .sidebar {{
+                        background: white;
+                        padding: 15px;
+                        border-radius: 10px;
+                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                    }}
+                    .signature-preview {{
+                        background: #f8f9fa;
+                        border: 2px dashed #667eea;
+                        border-radius: 8px;
+                        padding: 10px;
+                        text-align: center;
+                        margin-bottom: 15px;
+                    }}
+                    .signature-preview img {{
+                        max-width: 100%;
+                        height: auto;
+                        cursor: grab;
+                    }}
+                    .signature-preview img:active {{
+                        cursor: grabbing;
+                    }}
+                    .controls {{
+                        background: #f8f9fa;
+                        padding: 10px;
+                        border-radius: 8px;
+                        margin-bottom: 10px;
+                    }}
+                    .controls label {{
+                        display: block;
+                        font-size: 12px;
+                        font-weight: 600;
+                        margin-bottom: 5px;
+                    }}
+                    .controls input[type="range"] {{
+                        width: 100%;
+                    }}
+                    .btn {{
+                        width: 100%;
+                        padding: 10px;
+                        border: none;
+                        border-radius: 5px;
+                        font-weight: 600;
+                        cursor: pointer;
+                        margin-bottom: 8px;
+                        transition: all 0.3s;
+                    }}
+                    .btn-clear {{
+                        background: #dc3545;
+                        color: white;
+                    }}
+                    .btn-clear:hover {{
+                        background: #c82333;
+                    }}
+                    .btn-apply {{
+                        background: #28a745;
+                        color: white;
+                    }}
+                    .btn-apply:hover {{
+                        background: #218838;
+                    }}
+                    .instructions {{
+                        background: #fff3cd;
+                        padding: 10px;
+                        border-radius: 5px;
+                        font-size: 11px;
+                        color: #856404;
+                    }}
+                    .instructions ul {{
+                        margin-left: 15px;
+                        margin-top: 5px;
+                    }}
+                    .canvas-area {{
+                        background: white;
+                        padding: 20px;
+                        border-radius: 10px;
+                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                        display: flex;
+                        justify-content: center;
+                        overflow: auto;
+                    }}
+                    #pdfCanvas {{
+                        position: relative;
+                        background: white;
+                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                    }}
+                    #pdfCanvas img {{
+                        display: block;
+                        max-width: 100%;
+                        height: auto;
+                    }}
+                    .signature-on-canvas {{
+                        position: absolute;
+                        cursor: move;
+                        border: 2px dashed #667eea;
+                        background: rgba(102, 126, 234, 0.1);
+                        padding: 3px;
+                    }}
+                    .signature-on-canvas:hover {{
+                        border-color: #764ba2;
+                        background: rgba(118, 75, 162, 0.15);
+                    }}
+                    .signature-on-canvas img {{
+                        width: 100%;
+                        height: 100%;
+                        display: block;
+                    }}
+                    .resize-handle {{
+                        position: absolute;
+                        bottom: -8px;
+                        right: -8px;
+                        width: 16px;
+                        height: 16px;
+                        background: #667eea;
+                        border-radius: 50%;
+                        cursor: nwse-resize;
+                        border: 2px solid white;
+                    }}
+                    .delete-btn {{
+                        position: absolute;
+                        top: -8px;
+                        right: -8px;
+                        width: 20px;
+                        height: 20px;
+                        background: #dc3545;
+                        color: white;
+                        border: 2px solid white;
+                        border-radius: 50%;
+                        cursor: pointer;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-weight: bold;
+                        font-size: 14px;
+                    }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="sidebar">
+                        <div class="signature-preview">
+                            <p style="font-size: 12px; font-weight: 600; margin-bottom: 8px;">🖋️ Signature</p>
+                            <img id="signaturePreview" src="data:image/png;base64,{sig_base64}" draggable="true">
+                        </div>
 
-    sig_width = int(sig_no_bg.width * scale / 100)
-    sig_height = int(sig_no_bg.height * scale / 100)
+                        <div class="controls">
+                            <label>Size: <span id="sizeValue">100</span>%</label>
+                            <input type="range" id="sizeSlider" min="30" max="250" value="100">
+                        </div>
 
-    st.info(f"PDF size: {int(pdf_width)} × {int(pdf_height)} points")
+                        <button class="btn btn-clear" onclick="clearSignatures()">🗑️ Clear All</button>
+                        <button class="btn btn-apply" onclick="applySignatures()">✅ Apply to PDF</button>
 
-    # --------------------------------------------------
-    # APPLY SIGNATURE
-    # --------------------------------------------------
-    if st.button("✍️ Apply Signature to PDF", type="primary", use_container_width=True):
+                        <div class="instructions">
+                            <strong>📋 Instructions:</strong>
+                            <ul>
+                                <li>Drag signature to PDF</li>
+                                <li>Move by dragging</li>
+                                <li>Resize with corner handle</li>
+                                <li>Click X to remove</li>
+                            </ul>
+                        </div>
+                    </div>
 
-        writer = PdfWriter()
-        sig_resized = sig_no_bg.resize(
-            (sig_width, sig_height),
-            Image.Resampling.LANCZOS
-        )
+                    <div class="canvas-area">
+                        <div id="pdfCanvas">
+                            <img src="data:image/png;base64,{pdf_base64}" id="pdfImage">
+                        </div>
+                    </div>
+                </div>
 
-        for i, page in enumerate(reader.pages):
+                <script>
+                    let signatures = [];
+                    let draggedSignature = null;
+                    let resizing = false;
+                    let offsetX, offsetY;
+                    const pdfCanvas = document.getElementById('pdfCanvas');
+                    const signaturePreview = document.getElementById('signaturePreview');
+                    const sizeSlider = document.getElementById('sizeSlider');
+                    const sizeValue = document.getElementById('sizeValue');
+                    const pdfImage = document.getElementById('pdfImage');
 
-            if i == 0 or apply_all:
-                packet = io.BytesIO()
-                page_w = float(page.mediabox.width)
-                page_h = float(page.mediabox.height)
-                can = canvas.Canvas(packet, pagesize=(page_w, page_h))
+                    sizeSlider.addEventListener('input', (e) => {{
+                        sizeValue.textContent = e.target.value;
+                    }});
 
-                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                    tmp_path = tmp.name
-                    sig_resized.save(tmp_path)
+                    signaturePreview.addEventListener('dragstart', (e) => {{
+                        e.dataTransfer.effectAllowed = 'copy';
+                    }});
 
-                try:
-                    can.drawImage(
-                        tmp_path,
-                        x_pdf,
-                        y_pdf - sig_height,
-                        width=sig_width,
-                        height=sig_height,
-                        mask="auto"
-                    )
-                    can.save()
-                finally:
-                    os.unlink(tmp_path)
+                    pdfCanvas.addEventListener('dragover', (e) => {{
+                        e.preventDefault();
+                    }});
 
-                packet.seek(0)
-                overlay = PdfReader(packet)
-                page.merge_page(overlay.pages[0])
+                    pdfCanvas.addEventListener('drop', (e) => {{
+                        e.preventDefault();
+                        const rect = pdfCanvas.getBoundingClientRect();
+                        const x = e.clientX - rect.left;
+                        const y = e.clientY - rect.top;
+                        addSignature(x, y);
+                    }});
 
-            writer.add_page(page)
+                    function addSignature(x, y) {{
+                        const size = parseInt(sizeSlider.value);
+                        const sigWidth = 150 * (size / 100);
+                        const sigHeight = 75 * (size / 100);
 
-        output = io.BytesIO()
-        writer.write(output)
-        output.seek(0)
+                        const sigDiv = document.createElement('div');
+                        sigDiv.className = 'signature-on-canvas';
+                        sigDiv.style.left = (x - sigWidth / 2) + 'px';
+                        sigDiv.style.top = (y - sigHeight / 2) + 'px';
+                        sigDiv.style.width = sigWidth + 'px';
+                        sigDiv.style.height = sigHeight + 'px';
 
-        st.success("✅ Signature applied successfully!")
+                        const img = document.createElement('img');
+                        img.src = signaturePreview.src;
+                        sigDiv.appendChild(img);
 
-        st.download_button(
-            "⬇️ Download Signed PDF",
-            output,
-            "signed_document.pdf",
-            "application/pdf",
-            use_container_width=True
-        )
+                        const resizeHandle = document.createElement('div');
+                        resizeHandle.className = 'resize-handle';
+                        sigDiv.appendChild(resizeHandle);
 
-else:
-    st.info("👆 Upload a PDF and a signature image to get started.")
+                        const deleteBtn = document.createElement('div');
+                        deleteBtn.className = 'delete-btn';
+                        deleteBtn.innerHTML = '×';
+                        deleteBtn.onclick = () => {{
+                            sigDiv.remove();
+                            signatures = signatures.filter(s => s.element !== sigDiv);
+                        }};
+                        sigDiv.appendChild(deleteBtn);
+
+                        sigDiv.addEventListener('mousedown', (e) => {{
+                            if (e.target === resizeHandle) {{
+                                resizing = true;
+                                draggedSignature = sigDiv;
+                            }} else if (e.target !== deleteBtn) {{
+                                draggedSignature = sigDiv;
+                                const rect = pdfCanvas.getBoundingClientRect();
+                                offsetX = e.clientX - rect.left - sigDiv.offsetLeft;
+                                offsetY = e.clientY - rect.top - sigDiv.offsetTop;
+                            }}
+                        }});
+
+                        pdfCanvas.appendChild(sigDiv);
+                        signatures.push({{
+                            element: sigDiv,
+                            x: parseFloat(sigDiv.style.left),
+                            y: parseFloat(sigDiv.style.top),
+                            width: parseFloat(sigDiv.style.width),
+                            height: parseFloat(sigDiv.style.height)
+                        }});
+                    }}
+
+                    document.addEventListener('mousemove', (e) => {{
+                        if (draggedSignature && !resizing) {{
+                            const rect = pdfCanvas.getBoundingClientRect();
+                            let x = e.clientX - rect.left - offsetX;
+                            let y = e.clientY - rect.top - offsetY;
+                            
+                            x = Math.max(0, Math.min(x, pdfCanvas.offsetWidth - draggedSignature.offsetWidth));
+                            y = Math.max(0, Math.min(y, pdfCanvas.offsetHeight - draggedSignature.offsetHeight));
+                            
+                            draggedSignature.style.left = x + 'px';
+                            draggedSignature.style.top = y + 'px';
+                        }} else if (resizing && draggedSignature) {{
+                            const rect = pdfCanvas.getBoundingClientRect();
+                            const width = e.clientX - rect.left - draggedSignature.offsetLeft;
+                            const height = width * 0.5;
+                            
+                            if (width > 30) {{
+                                draggedSignature.style.width = width + 'px';
+                                draggedSignature.style.height = height + 'px';
+                            }}
+                        }}
+                    }});
+
+                    document.addEventListener('mouseup', () => {{
+                        draggedSignature = null;
+                        resizing = false;
+                    }});
+
+                    function clearSignatures() {{
+                        signatures.forEach(sig => sig.element.remove());
+                        signatures = [];
+                    }}
+
+                    function applySignatures() {{
+                        const pdfWidth = {pdf_width};
+                        const pdfHeight = {pdf_height};
+                        const canvasWidth = pdfImage.offsetWidth;
+                        const canvasHeight = pdfImage.offsetHeight;
+
+                        const signaturesData = signatures.map(sig => {{
+                            const element = sig.element;
+                            return {{
+                                x: (parseFloat(element.style.left) / canvasWidth) * pdfWidth,
+                                y: (parseFloat(element.style.top) / canvasHeight) * pdfHeight,
+                                width: (parseFloat(element.style.width) / canvasWidth) * pdfWidth,
+                                height: (parseFloat(element.style.height) / canvasHeight) * pdfHeight
+                            }};
+                        }});
+
+                        window.parent.postMessage({{
+                            type: 'streamlit:setComponentValue',
+                            value: signaturesData
+                        }}, '*');
+                    }}
+                </script>
+            </body>
+            </html>
+            """
+
+            # Render the interactive component
+            signature_positions = components.html(html_code, height=700, scrolling=True)
+
+            # Process and download
+            if signature_positions:
+                st.success(f"✅ {len(signature_positions)} signature(s) positioned!")
+                
+                apply_all_pages = st.checkbox(f"Apply to all {total_pages} pages", value=False)
+
+                if st.button("⬇️ Download Signed PDF", type="primary", use_container_width=True):
+                    with st.spinner("Creating signed PDF..."):
+                        try:
+                            reader = PdfReader(io.BytesIO(pdf_file.getvalue()))
+                            writer = PdfWriter()
+
+                            for page_num, page in enumerate(reader.pages):
+                                if page_num == 0 or apply_all_pages:
+                                    page_w = float(page.mediabox.width)
+                                    page_h = float(page.mediabox.height)
+                                    
+                                    packet = io.BytesIO()
+                                    can = canvas.Canvas(packet, pagesize=(page_w, page_h))
+
+                                    # Draw each signature
+                                    for sig_pos in signature_positions:
+                                        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                                            tmp_path = tmp.name
+                                            sig_no_bg.save(tmp_path)
+                                        
+                                        try:
+                                            x = sig_pos['x']
+                                            y = page_h - sig_pos['y'] - sig_pos['height']
+                                            
+                                            can.drawImage(
+                                                tmp_path,
+                                                x, y,
+                                                width=sig_pos['width'],
+                                                height=sig_pos['height'],
+                                                mask='auto'
+                                            )
+                                        finally:
+                                            if os.path.exists(tmp_path):
+                                                os.unlink(tmp_path)
+
+                                    can.save()
+                                    packet.seek(0)
+                                    overlay = PdfReader(packet)
+                                    page.merge_page(overlay.pages[0])
+
+                                writer.add_page(page)
+
+                            output = io.BytesIO()
+                            writer.write(output)
+                            output.seek(0)
+
+                            st.download_button(
+                                "📥 Download Signed PDF",
+                                output,
+                                file_name="signed_document.pdf",
+                                mime="application/pdf",
+                                use_container_width=True
+                            )
+
+                        except Exception as e:
+                            st.error(f"❌ Error: {str(e)}")
+
+        except Exception as e:
+            st.error(f"❌ Error loading files: {str(e)}")
+    else:
+        st.info("👆 Upload both PDF and signature to get started")
 
 
 #######################################################################
@@ -2188,6 +2433,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
