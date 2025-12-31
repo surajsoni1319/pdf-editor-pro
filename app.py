@@ -1936,7 +1936,7 @@ elif feature == "🔀 Reorder Pages":
 # Feature: Sign PDF 
 # ======================================================
 # ======================================================
-# Feature: Sign PDF (FINAL – STABLE)
+# Feature: Sign PDF (SELF-CONTAINED - NO STREAMLIT DEPENDENCY)
 # ======================================================
 if feature == "✍️ Sign PDF":
 
@@ -1958,7 +1958,7 @@ if feature == "✍️ Sign PDF":
         data[mask, 3] = 0
         return Image.fromarray(data)
 
-    # ---------- Upload Section (ALWAYS visible) ----------
+    # ---------- Upload Section ----------
     col1, col2 = st.columns(2)
 
     with col1:
@@ -1977,7 +1977,7 @@ if feature == "✍️ Sign PDF":
 
     st.divider()
 
-    # ---------- Process ONLY when both files exist ----------
+    # ---------- Process when both files exist ----------
     if pdf_file and sig_file:
 
         # Process signature
@@ -1991,9 +1991,9 @@ if feature == "✍️ Sign PDF":
         # Get PDF as base64
         pdf_b64 = base64.b64encode(pdf_file.getvalue()).decode()
 
-        st.success(f"✅ Files loaded successfully!")
+        st.success(f"✅ Files loaded! Drag signature onto PDF pages, then click Download.")
 
-        # ---------- HTML + JS (Self-Contained PDF Editor) ----------
+        # ---------- Self-Contained HTML Editor ----------
         html = f"""
 <!DOCTYPE html>
 <html>
@@ -2021,7 +2021,7 @@ body {{
     position: sticky;
     top: 10px;
     height: fit-content;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }}
 .pages-container {{
     flex: 1;
@@ -2033,54 +2033,62 @@ body {{
     margin-bottom: 20px;
     border: 2px solid #ddd;
     background: #fff;
-    border-radius: 4px;
+    border-radius: 8px;
     overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }}
 .page-header {{
-    background: #f0f0f0;
-    padding: 8px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 12px;
     font-weight: bold;
-    border-bottom: 1px solid #ddd;
+    font-size: 14px;
 }}
 .canvas-wrapper {{
     position: relative;
     display: inline-block;
+    background: white;
 }}
 canvas {{
     display: block;
-    cursor: crosshair;
 }}
 .signature {{
     position: absolute;
     cursor: move;
     z-index: 10;
-    transition: transform 0.1s ease;
+    transition: all 0.2s ease;
     border: 2px dashed transparent;
+    border-radius: 4px;
 }}
 .signature:hover {{
     transform: scale(1.05);
     border-color: #4CAF50;
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
 }}
 .signature img {{
     width: 100%;
     pointer-events: none;
+    display: block;
 }}
 button {{
     width: 100%;
-    padding: 10px;
+    padding: 12px;
     margin: 5px 0;
     border: none;
-    border-radius: 5px;
+    border-radius: 6px;
     cursor: pointer;
     font-size: 14px;
     font-weight: bold;
+    transition: all 0.3s ease;
 }}
 .btn-download {{
-    background: #4CAF50;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }}
 .btn-download:hover {{
-    background: #45a049;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
 }}
 .btn-clear {{
     background: #f44336;
@@ -2091,15 +2099,42 @@ button {{
 }}
 input[type="range"] {{
     width: 100%;
+    margin: 10px 0;
 }}
 .drag-signature {{
     width: 100%;
     cursor: grab;
-    border: 1px solid #ddd;
-    border-radius: 4px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 5px;
+    background: #fafafa;
+    transition: all 0.3s ease;
+}}
+.drag-signature:hover {{
+    border-color: #667eea;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
 }}
 .drag-signature:active {{
     cursor: grabbing;
+}}
+.info-text {{
+    font-size: 12px;
+    color: #666;
+    line-height: 1.5;
+    margin-top: 10px;
+    padding: 10px;
+    background: #f0f4ff;
+    border-radius: 6px;
+    border-left: 3px solid #667eea;
+}}
+.size-value {{
+    display: inline-block;
+    background: #667eea;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
 }}
 </style>
 </head>
@@ -2108,20 +2143,31 @@ input[type="range"] {{
 
 <div class="main-container">
     <div class="sidebar">
-        <b>🖋 Drag Signature</b><br><br>
+        <h3 style="margin-top:0; color:#667eea;">🖋️ Signature Tool</h3>
+        
+        <label style="display:block; margin-bottom:8px; font-weight:bold; color:#333;">Drag this signature:</label>
         <img id="sig" class="drag-signature" src="data:image/png;base64,{sig_b64}" draggable="true">
+        
         <br><br>
-        <label><b>Size</b></label><br>
-        <input type="range" id="size" min="30" max="200" value="100">
-        <br><br>
+        <label style="display:block; margin-bottom:5px; font-weight:bold; color:#333;">
+            Size: <span class="size-value" id="sizeValue">100%</span>
+        </label>
+        <input type="range" id="size" min="30" max="200" value="100" oninput="document.getElementById('sizeValue').textContent = this.value + '%'">
+        
+        <br>
         <button class="btn-download" onclick="downloadSignedPDF()">📥 Download Signed PDF</button>
-        <button class="btn-clear" onclick="clearAll()">🗑 Clear All Signatures</button>
-        <br><br>
-        <p style="font-size:12px;color:#666;">💡 Drag signature onto PDF pages. Signatures are saved automatically when you download.</p>
+        <button class="btn-clear" onclick="clearAll()">🗑️ Clear All</button>
+        
+        <div class="info-text">
+            💡 <strong>Quick Guide:</strong><br>
+            1. Drag signature onto PDF pages<br>
+            2. Adjust size with slider<br>
+            3. Click Download button
+        </div>
     </div>
 
     <div class="pages-container" id="pagesContainer">
-        <!-- Pages will be rendered here -->
+        <p style="text-align:center; color:#999;">Loading PDF pages...</p>
     </div>
 </div>
 
@@ -2140,6 +2186,7 @@ sig.ondragstart = e => {{
 
 async function renderAllPages() {{
     const container = document.getElementById("pagesContainer");
+    container.innerHTML = '';
     
     for (let i = 1; i <= pdfDoc.numPages; i++) {{
         const page = await pdfDoc.getPage(i);
@@ -2148,9 +2195,9 @@ async function renderAllPages() {{
         const pageDiv = document.createElement("div");
         pageDiv.className = "page-container";
         pageDiv.innerHTML = `
-            <div class="page-header">Page ${{i}} of ${{pdfDoc.numPages}}</div>
-            <div class="canvas-wrapper" data-page="${{i}}">
-                <canvas></canvas>
+            <div class="page-header">📄 Page ${{i}} of ${{pdfDoc.numPages}}</div>
+            <div class="canvas-wrapper" data-page="${{i}}" style="width:${{viewport.width}}px; height:${{viewport.height}}px;">
+                <canvas width="${{viewport.width}}" height="${{viewport.height}}"></canvas>
             </div>
         `;
         
@@ -2158,8 +2205,6 @@ async function renderAllPages() {{
         
         const canvas = pageDiv.querySelector("canvas");
         const ctx = canvas.getContext("2d");
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
         
         await page.render({{
             canvasContext: ctx,
@@ -2226,25 +2271,37 @@ function makeDraggable(element) {{
 }}
 
 function clearAll() {{
+    let count = 0;
     Object.keys(allSignatures).forEach(pageNum => {{
+        count += allSignatures[pageNum].length;
         allSignatures[pageNum].forEach(sig => sig.element.remove());
         allSignatures[pageNum] = [];
     }});
-    alert("✅ All signatures cleared!");
+    
+    if (count > 0) {{
+        alert("✅ Cleared " + count + " signature(s)!");
+    }} else {{
+        alert("ℹ️ No signatures to clear.");
+    }}
 }}
 
 async function downloadSignedPDF() {{
     try {{
         // Check if any signatures exist
-        let hasSignatures = false;
+        let totalSigs = 0;
         Object.keys(allSignatures).forEach(pageNum => {{
-            if (allSignatures[pageNum].length > 0) hasSignatures = true;
+            totalSigs += allSignatures[pageNum].length;
         }});
         
-        if (!hasSignatures) {{
+        if (totalSigs === 0) {{
             alert("⚠️ Please drag at least one signature onto the PDF first!");
             return;
         }}
+        
+        // Show progress
+        const originalText = event.target.textContent;
+        event.target.textContent = "⏳ Generating PDF...";
+        event.target.disabled = true;
         
         // Load signature image
         const sigImg = new Image();
@@ -2275,23 +2332,30 @@ async function downloadSignedPDF() {{
                     const viewport = sig.viewport;
                     
                     // Get signature position and size from DOM
-                    const x = parseFloat(element.style.left);
-                    const y = parseFloat(element.style.top);
-                    const w = parseFloat(element.offsetWidth);
-                    const h = parseFloat(element.offsetHeight);
+                    const canvasX = parseFloat(element.style.left);
+                    const canvasY = parseFloat(element.style.top);
+                    const canvasW = element.offsetWidth;
+                    const canvasH = element.offsetHeight;
                     
-                    // Convert from canvas coordinates to PDF coordinates
-                    const pdfX = (x / viewport.width) * pageWidth;
-                    const pdfY = pageHeight - ((y / viewport.height) * pageHeight) - ((h / viewport.height) * pageHeight);
-                    const pdfW = (w / viewport.width) * pageWidth;
-                    const pdfH = (h / viewport.height) * pageHeight;
+                    // Scale factor from canvas to PDF
+                    const scaleX = pageWidth / viewport.width;
+                    const scaleY = pageHeight / viewport.height;
+                    
+                    // Convert coordinates to PDF space
+                    const pdfX = canvasX * scaleX;
+                    const pdfW = canvasW * scaleX;
+                    const pdfH = canvasH * scaleY;
+                    
+                    // PDF Y-axis starts from bottom, canvas from top
+                    const pdfY = pageHeight - (canvasY * scaleY) - pdfH;
                     
                     // Draw signature on PDF
                     page.drawImage(sigImage, {{
                         x: pdfX,
                         y: pdfY,
                         width: pdfW,
-                        height: pdfH
+                        height: pdfH,
+                        opacity: 1
                     }});
                 }});
             }}
@@ -2309,10 +2373,16 @@ async function downloadSignedPDF() {{
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
         
-        alert("✅ PDF downloaded successfully!");
+        // Reset button
+        event.target.textContent = originalText;
+        event.target.disabled = false;
+        
+        alert("✅ Signed PDF with " + totalSigs + " signature(s) downloaded successfully!");
     }} catch (error) {{
         console.error("Download error:", error);
-        alert("❌ Error downloading PDF: " + error.message);
+        alert("❌ Error: " + error.message);
+        event.target.textContent = "📥 Download Signed PDF";
+        event.target.disabled = false;
     }}
 }}
 
@@ -2320,6 +2390,9 @@ async function downloadSignedPDF() {{
 pdfjsLib.getDocument({{ data: pdfData }}).promise.then(doc => {{
     pdfDoc = doc;
     renderAllPages();
+}}).catch(error => {{
+    document.getElementById("pagesContainer").innerHTML = 
+        '<p style="color:red; text-align:center;">❌ Error loading PDF: ' + error.message + '</p>';
 }});
 </script>
 
@@ -2330,7 +2403,7 @@ pdfjsLib.getDocument({{ data: pdfData }}).promise.then(doc => {{
         components.html(html, height=900, scrolling=True)
 
     else:
-        st.info("👆 Upload both PDF and signature to continue")
+        st.info("👆 Upload both PDF and signature image to get started")
 
 
 
@@ -2346,6 +2419,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
