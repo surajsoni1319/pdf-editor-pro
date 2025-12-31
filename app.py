@@ -1936,7 +1936,6 @@ elif feature == "🔀 Reorder Pages":
 # ======================================================
 if feature == "✍️ Sign PDF":
 
-    import streamlit as st
     from PIL import Image
     import numpy as np
     import io, base64
@@ -2418,6 +2417,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
