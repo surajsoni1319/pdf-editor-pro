@@ -2098,9 +2098,10 @@ if feature == "✍️ Sign PDF":
                     <label><b>Size</b></label><br>
                     <input type="range" id="size" min="30" max="200" value="100" style="width:100%;">
                     <br><br>
+                    <button class="btn-apply" onclick="apply()">💾 Save Signatures</button>
                     <button class="btn-clear" onclick="clearAll()">🗑 Clear All</button>
                     <br><br>
-                    <p style="font-size:12px;color:#666;">💡 Signatures are automatically saved when you drag them onto the PDF.</p>
+                    <p style="font-size:12px;color:#666;">💡 After dragging signatures, click "Save Signatures" before downloading.</p>
                 </div>
 
                 <div class="pages-container">
@@ -2145,9 +2146,6 @@ if feature == "✍️ Sign PDF":
                         canvas.appendChild(div);
                         allSignatures[pageNum].push(div);
 
-                        // Auto-apply after dropping
-                        setTimeout(apply, 100);
-
                         // Smooth hover effect
                         div.onmouseenter = () => {{
                             div.style.transform = "scale(1.05)";
@@ -2173,8 +2171,6 @@ if feature == "✍️ Sign PDF":
                             document.onmouseup = () => {{
                                 document.onmousemove = null;
                                 document.onmouseup = null;
-                                // Auto-apply after moving
-                                setTimeout(apply, 100);
                             }};
                         }};
                     }};
@@ -2190,6 +2186,7 @@ if feature == "✍️ Sign PDF":
                 function apply() {{
                     const pagesInfo = {pages_info};
                     const result = {{}};
+                    let totalSigs = 0;
 
                     Object.keys(allSignatures).forEach(pageNum => {{
                         const canvas = document.querySelector('.canvas[data-page="' + pageNum + '"]');
@@ -2197,6 +2194,7 @@ if feature == "✍️ Sign PDF":
                         const pageInfo = pagesInfo[parseInt(pageNum)];
 
                         if (allSignatures[pageNum].length > 0) {{
+                            totalSigs += allSignatures[pageNum].length;
                             result[pageNum] = allSignatures[pageNum].map(function(s) {{
                                 return {{
                                     x: (parseFloat(s.style.left) / pdfImg.offsetWidth) * pageInfo.width,
@@ -2208,10 +2206,15 @@ if feature == "✍️ Sign PDF":
                         }}
                     }});
 
-                    window.parent.postMessage(
-                        {{ type: "streamlit:setComponentValue", value: result }},
-                        "*"
-                    );
+                    if (totalSigs > 0) {{
+                        window.parent.postMessage(
+                            {{ type: "streamlit:setComponentValue", value: result }},
+                            "*"
+                        );
+                        alert("✅ " + totalSigs + " signature(s) saved! You can now download the PDF.");
+                    }} else {{
+                        alert("⚠️ Please drag at least one signature onto the PDF first!");
+                    }}
                 }}
                 
                 // Listen for download request from Streamlit
@@ -2237,17 +2240,13 @@ if feature == "✍️ Sign PDF":
         st.divider()
         st.subheader("📥 Download Signed PDF")
         
-        st.info("ℹ️ Drag signatures onto the PDF pages, then click the button below to download.")
+        # Check if signatures have been saved
+        if st.session_state.get('has_signatures', False):
+            st.success(f"✅ Signatures saved! Click below to download your signed PDF.")
+        else:
+            st.info("ℹ️ Drag signatures onto the PDF pages, then click '💾 Save Signatures' in the sidebar.")
         
         if st.button("⬇️ Download Signed PDF", type="primary", use_container_width=True):
-            # Force a rerun to capture latest signatures
-            st.session_state.download_requested = True
-            st.rerun()
-        
-        # Process download after rerun
-        if st.session_state.get('download_requested', False):
-            st.session_state.download_requested = False
-            
             # Get current signature positions
             current_sigs = st.session_state.get('signatures_applied', {})
             
@@ -2304,14 +2303,13 @@ if feature == "✍️ Sign PDF":
                     except Exception as e:
                         st.error(f"❌ Error generating PDF: {str(e)}")
             else:
-                st.warning("⚠️ No signatures detected. Please drag at least one signature onto the PDF and wait a moment for it to register, then try downloading again.")
+                st.warning("⚠️ No signatures saved yet! Please drag signatures onto the PDF and click '💾 Save Signatures' in the sidebar first.")
 
     else:
         st.info("👆 Upload both PDF and signature to continue")
         # Reset session state when files are removed
         if 'signatures_applied' in st.session_state:
             st.session_state.signatures_applied = None
-
 
 
 
@@ -2327,5 +2325,6 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
