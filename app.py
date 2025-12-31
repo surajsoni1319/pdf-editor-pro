@@ -2213,6 +2213,13 @@ if feature == "✍️ Sign PDF":
                         "*"
                     );
                 }}
+                
+                // Listen for download request from Streamlit
+                window.addEventListener('message', function(event) {{
+                    if (event.data && event.data.type === 'requestSignatures') {{
+                        apply();
+                    }}
+                }});
             </script>
         </body>
         </html>
@@ -2221,9 +2228,10 @@ if feature == "✍️ Sign PDF":
         # Auto-capture signatures on any interaction
         sig_positions = components.html(html, height=850)
 
-        # Always store the latest positions
-        if sig_positions and isinstance(sig_positions, dict):
+        # Always store the latest positions automatically
+        if sig_positions and isinstance(sig_positions, dict) and sig_positions:
             st.session_state.signatures_applied = sig_positions
+            st.session_state.has_signatures = True
 
         # ---------- Download Signed PDF (ALWAYS VISIBLE) ----------
         st.divider()
@@ -2232,59 +2240,71 @@ if feature == "✍️ Sign PDF":
         st.info("ℹ️ Drag signatures onto the PDF pages, then click the button below to download.")
         
         if st.button("⬇️ Download Signed PDF", type="primary", use_container_width=True):
+            # Force a rerun to capture latest signatures
+            st.session_state.download_requested = True
+            st.rerun()
+        
+        # Process download after rerun
+        if st.session_state.get('download_requested', False):
+            st.session_state.download_requested = False
+            
             # Get current signature positions
             current_sigs = st.session_state.get('signatures_applied', {})
             
-            if current_sigs and any(current_sigs.values()):
+            # Check if we have any signatures
+            if current_sigs and isinstance(current_sigs, dict) and any(current_sigs.values()):
                 with st.spinner("Generating signed PDF..."):
-                    writer = PdfWriter()
+                    try:
+                        writer = PdfWriter()
 
-                    tmp_sig = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-                    sig_no_bg.save(tmp_sig.name)
+                        tmp_sig = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+                        sig_no_bg.save(tmp_sig.name)
 
-                    for i, page in enumerate(reader.pages):
-                        page_signatures = current_sigs.get(str(i), [])
-                        
-                        if page_signatures:
-                            packet = io.BytesIO()
-                            page_w = float(page.mediabox.width)
-                            page_h = float(page.mediabox.height)
-                            can = canvas.Canvas(packet, pagesize=(page_w, page_h))
+                        for i, page in enumerate(reader.pages):
+                            page_signatures = current_sigs.get(str(i), [])
+                            
+                            if page_signatures:
+                                packet = io.BytesIO()
+                                page_w = float(page.mediabox.width)
+                                page_h = float(page.mediabox.height)
+                                can = canvas.Canvas(packet, pagesize=(page_w, page_h))
 
-                            for p in page_signatures:
-                                can.drawImage(
-                                    tmp_sig.name,
-                                    p["x"],
-                                    page_h - p["y"] - p["h"],
-                                    p["w"],
-                                    p["h"],
-                                    mask="auto"
-                                )
+                                for p in page_signatures:
+                                    can.drawImage(
+                                        tmp_sig.name,
+                                        p["x"],
+                                        page_h - p["y"] - p["h"],
+                                        p["w"],
+                                        p["h"],
+                                        mask="auto"
+                                    )
 
-                            can.save()
-                            packet.seek(0)
-                            overlay = PdfReader(packet)
-                            page.merge_page(overlay.pages[0])
+                                can.save()
+                                packet.seek(0)
+                                overlay = PdfReader(packet)
+                                page.merge_page(overlay.pages[0])
 
-                        writer.add_page(page)
+                            writer.add_page(page)
 
-                    os.unlink(tmp_sig.name)
+                        os.unlink(tmp_sig.name)
 
-                    out = io.BytesIO()
-                    writer.write(out)
-                    out.seek(0)
+                        out = io.BytesIO()
+                        writer.write(out)
+                        out.seek(0)
 
-                    st.success("✅ PDF signed successfully!")
-                    st.download_button(
-                        "📥 Click Here to Download",
-                        out,
-                        file_name="signed_document.pdf",
-                        mime="application/pdf",
-                        use_container_width=True,
-                        key="final_download"
-                    )
+                        st.success("✅ PDF signed successfully!")
+                        st.download_button(
+                            "📥 Click Here to Download",
+                            out,
+                            file_name="signed_document.pdf",
+                            mime="application/pdf",
+                            use_container_width=True,
+                            key="final_download"
+                        )
+                    except Exception as e:
+                        st.error(f"❌ Error generating PDF: {str(e)}")
             else:
-                st.warning("⚠️ Please drag at least one signature onto the PDF first.")
+                st.warning("⚠️ No signatures detected. Please drag at least one signature onto the PDF and wait a moment for it to register, then try downloading again.")
 
     else:
         st.info("👆 Upload both PDF and signature to continue")
@@ -2307,4 +2327,5 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
