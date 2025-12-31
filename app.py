@@ -2123,28 +2123,53 @@ if feature == "✍️ Sign PDF":
 
                     canvas.ondrop = e => {{
                         e.preventDefault();
+                        const rect = canvas.getBoundingClientRect();
+                        const x = e.clientX - rect.left;
+                        const y = e.clientY - rect.top;
+                        
                         const div = document.createElement("div");
                         div.style.position = "absolute";
-                        div.style.left = e.offsetX + "px";
-                        div.style.top = e.offsetY + "px";
+                        div.style.left = x + "px";
+                        div.style.top = y + "px";
                         div.style.width = (150 * size.value / 100) + "px";
                         div.style.cursor = "move";
                         div.style.zIndex = "10";
+                        div.style.transition = "transform 0.1s ease";
 
                         const img = document.createElement("img");
                         img.src = sig.src;
                         img.style.width = "100%";
+                        img.style.pointerEvents = "none";
                         div.appendChild(img);
                         canvas.appendChild(div);
                         allSignatures[pageNum].push(div);
 
+                        // Smooth hover effect
+                        div.onmouseenter = () => {{
+                            div.style.transform = "scale(1.05)";
+                        }};
+                        div.onmouseleave = () => {{
+                            div.style.transform = "scale(1)";
+                        }};
+
                         div.onmousedown = ev => {{
-                            let ox = ev.offsetX, oy = ev.offsetY;
+                            ev.stopPropagation();
+                            let startX = ev.clientX;
+                            let startY = ev.clientY;
+                            let startLeft = parseFloat(div.style.left);
+                            let startTop = parseFloat(div.style.top);
+                            
                             document.onmousemove = m => {{
-                                div.style.left = (m.pageX - canvas.offsetLeft - ox) + "px";
-                                div.style.top = (m.pageY - canvas.offsetTop - oy) + "px";
+                                m.preventDefault();
+                                const deltaX = m.clientX - startX;
+                                const deltaY = m.clientY - startY;
+                                div.style.left = (startLeft + deltaX) + "px";
+                                div.style.top = (startTop + deltaY) + "px";
                             }};
-                            document.onmouseup = () => document.onmousemove = null;
+                            document.onmouseup = () => {{
+                                document.onmousemove = null;
+                                document.onmouseup = null;
+                            }};
                         }};
                     }};
                 }});
@@ -2159,7 +2184,6 @@ if feature == "✍️ Sign PDF":
                 function apply() {{
                     const pagesInfo = {pages_info};
                     const result = {{}};
-                    let hasSignatures = false;
 
                     Object.keys(allSignatures).forEach(pageNum => {{
                         const canvas = document.querySelector('.canvas[data-page="' + pageNum + '"]');
@@ -2167,7 +2191,6 @@ if feature == "✍️ Sign PDF":
                         const pageInfo = pagesInfo[parseInt(pageNum)];
 
                         if (allSignatures[pageNum].length > 0) {{
-                            hasSignatures = true;
                             result[pageNum] = allSignatures[pageNum].map(function(s) {{
                                 return {{
                                     x: (parseFloat(s.style.left) / pdfImg.offsetWidth) * pageInfo.width,
@@ -2179,90 +2202,91 @@ if feature == "✍️ Sign PDF":
                         }}
                     }});
 
-                    if (hasSignatures) {{
-                        window.parent.postMessage(
-                            {{ type: "streamlit:setComponentValue", value: result }},
-                            "*"
-                        );
-                    }} else {{
-                        alert("Please drag at least one signature onto the PDF before applying!");
-                    }}
+                    window.parent.postMessage(
+                        {{ type: "streamlit:setComponentValue", value: result }},
+                        "*"
+                    );
                 }}
             </script>
         </body>
         </html>
         """
 
+        # Auto-capture signatures on any interaction
         sig_positions = components.html(html, height=850)
 
-        # Store in session state when received (this happens when Apply button is clicked)
-        if sig_positions and isinstance(sig_positions, dict) and sig_positions:
+        # Always store the latest positions
+        if sig_positions and isinstance(sig_positions, dict):
             st.session_state.signatures_applied = sig_positions
 
         # ---------- Download Signed PDF (ALWAYS VISIBLE) ----------
         st.divider()
         st.subheader("📥 Download Signed PDF")
         
-        st.info("ℹ️ After dragging signatures and clicking '✅ Apply Signatures' above, click the button below to download.")
+        st.info("ℹ️ Drag signatures onto the PDF, then click the button below to download.")
         
         if st.button("⬇️ Download Signed PDF", type="primary", use_container_width=True):
-            # Check if signatures have been applied
-            if st.session_state.signatures_applied and isinstance(st.session_state.signatures_applied, dict):
-                # Check if there are any actual signatures
-                has_sigs = any(st.session_state.signatures_applied.values())
-                
-                if has_sigs:
-                    with st.spinner("Generating signed PDF..."):
-                        writer = PdfWriter()
+            # Get current signature positions from JavaScript
+            st.session_state.trigger_download = True
+            st.rerun()
+        
+        # Check if download was triggered
+        if st.session_state.get('trigger_download', False):
+            st.session_state.trigger_download = False
+            
+            # Use the stored signature positions
+            current_sigs = st.session_state.get('signatures_applied', {})
+            
+            if current_sigs and any(current_sigs.values()):
+                with st.spinner("Generating signed PDF..."):
+                    writer = PdfWriter()
 
-                        tmp_sig = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-                        sig_no_bg.save(tmp_sig.name)
+                    tmp_sig = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+                    sig_no_bg.save(tmp_sig.name)
 
-                        for i, page in enumerate(reader.pages):
-                            page_signatures = st.session_state.signatures_applied.get(str(i), [])
-                            
-                            if page_signatures:
-                                packet = io.BytesIO()
-                                page_w = float(page.mediabox.width)
-                                page_h = float(page.mediabox.height)
-                                can = canvas.Canvas(packet, pagesize=(page_w, page_h))
+                    for i, page in enumerate(reader.pages):
+                        page_signatures = current_sigs.get(str(i), [])
+                        
+                        if page_signatures:
+                            packet = io.BytesIO()
+                            page_w = float(page.mediabox.width)
+                            page_h = float(page.mediabox.height)
+                            can = canvas.Canvas(packet, pagesize=(page_w, page_h))
 
-                                for p in page_signatures:
-                                    can.drawImage(
-                                        tmp_sig.name,
-                                        p["x"],
-                                        page_h - p["y"] - p["h"],
-                                        p["w"],
-                                        p["h"],
-                                        mask="auto"
-                                    )
+                            for p in page_signatures:
+                                can.drawImage(
+                                    tmp_sig.name,
+                                    p["x"],
+                                    page_h - p["y"] - p["h"],
+                                    p["w"],
+                                    p["h"],
+                                    mask="auto"
+                                )
 
-                                can.save()
-                                packet.seek(0)
-                                overlay = PdfReader(packet)
-                                page.merge_page(overlay.pages[0])
+                            can.save()
+                            packet.seek(0)
+                            overlay = PdfReader(packet)
+                            page.merge_page(overlay.pages[0])
 
-                            writer.add_page(page)
+                        writer.add_page(page)
 
-                        os.unlink(tmp_sig.name)
+                    os.unlink(tmp_sig.name)
 
-                        out = io.BytesIO()
-                        writer.write(out)
-                        out.seek(0)
+                    out = io.BytesIO()
+                    writer.write(out)
+                    out.seek(0)
 
-                        st.success("✅ PDF signed successfully!")
-                        st.download_button(
-                            "📥 Click Here to Download",
-                            out,
-                            file_name="signed_document.pdf",
-                            mime="application/pdf",
-                            use_container_width=True,
-                            key="final_download"
-                        )
-                else:
-                    st.error("❌ No signatures found! Please drag signatures onto the PDF and click '✅ Apply Signatures' first.")
+                    st.success("✅ PDF signed successfully!")
+                    st.download_button(
+                        "📥 Click Here to Download",
+                        out,
+                        file_name="signed_document.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        key="final_download"
+                    )
             else:
-                st.error("❌ No signatures applied yet! Please drag signatures onto the PDF and click '✅ Apply Signatures' first.")
+                st.warning("⚠️ Please drag at least one signature onto the PDF and click '✅ Apply Signatures' in the sidebar first.")
 
     else:
         st.info("👆 Upload both PDF and signature to continue")
@@ -2283,6 +2307,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
