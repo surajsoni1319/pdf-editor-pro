@@ -2098,8 +2098,9 @@ if feature == "✍️ Sign PDF":
                     <label><b>Size</b></label><br>
                     <input type="range" id="size" min="30" max="200" value="100" style="width:100%;">
                     <br><br>
-                    <button class="btn-apply" onclick="apply()">✅ Apply Signatures</button>
                     <button class="btn-clear" onclick="clearAll()">🗑 Clear All</button>
+                    <br><br>
+                    <p style="font-size:12px;color:#666;">💡 Signatures are automatically saved when you drag them onto the PDF.</p>
                 </div>
 
                 <div class="pages-container">
@@ -2144,6 +2145,9 @@ if feature == "✍️ Sign PDF":
                         canvas.appendChild(div);
                         allSignatures[pageNum].push(div);
 
+                        // Auto-apply after dropping
+                        setTimeout(apply, 100);
+
                         // Smooth hover effect
                         div.onmouseenter = () => {{
                             div.style.transform = "scale(1.05)";
@@ -2169,6 +2173,8 @@ if feature == "✍️ Sign PDF":
                             document.onmouseup = () => {{
                                 document.onmousemove = null;
                                 document.onmouseup = null;
+                                // Auto-apply after moving
+                                setTimeout(apply, 100);
                             }};
                         }};
                     }};
@@ -2223,18 +2229,10 @@ if feature == "✍️ Sign PDF":
         st.divider()
         st.subheader("📥 Download Signed PDF")
         
-        st.info("ℹ️ Drag signatures onto the PDF, then click the button below to download.")
+        st.info("ℹ️ Drag signatures onto the PDF pages, then click the button below to download.")
         
         if st.button("⬇️ Download Signed PDF", type="primary", use_container_width=True):
-            # Get current signature positions from JavaScript
-            st.session_state.trigger_download = True
-            st.rerun()
-        
-        # Check if download was triggered
-        if st.session_state.get('trigger_download', False):
-            st.session_state.trigger_download = False
-            
-            # Use the stored signature positions
+            # Get current signature positions
             current_sigs = st.session_state.get('signatures_applied', {})
             
             if current_sigs and any(current_sigs.values()):
@@ -2286,13 +2284,15 @@ if feature == "✍️ Sign PDF":
                         key="final_download"
                     )
             else:
-                st.warning("⚠️ Please drag at least one signature onto the PDF and click '✅ Apply Signatures' in the sidebar first.")
+                st.warning("⚠️ Please drag at least one signature onto the PDF first.")
 
     else:
         st.info("👆 Upload both PDF and signature to continue")
         # Reset session state when files are removed
         if 'signatures_applied' in st.session_state:
             st.session_state.signatures_applied = None
+
+
 
 
 #######################################################################
@@ -2307,23 +2307,4 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
