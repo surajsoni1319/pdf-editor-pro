@@ -2408,7 +2408,7 @@ elif feature == "🔀 Reorder Pages":
 
 
 # ======================================================
-# Feature: Sign PDF (FINAL – SELF CONTAINED & STABLE)
+# Feature: Sign PDF (SELF-CONTAINED - NO STREAMLIT DEPENDENCY)
 # ======================================================
 if feature == "✍️ Sign PDF":
 
@@ -2419,7 +2419,7 @@ if feature == "✍️ Sign PDF":
     import streamlit.components.v1 as components
 
     st.header("✍️ Sign PDF – Drag & Drop Signature")
-    st.write("Upload a PDF and a signature image, drag the signature onto pages, then download the signed PDF.")
+    st.write("Upload a PDF and a signature image, then drag the signature onto the document.")
 
     # ---------- Background Removal ----------
     def remove_signature_background(img, threshold=230):
@@ -2430,236 +2430,456 @@ if feature == "✍️ Sign PDF":
         data[mask, 3] = 0
         return Image.fromarray(data)
 
-    # ---------- Upload ----------
+    # ---------- Upload Section ----------
     col1, col2 = st.columns(2)
+
     with col1:
-        pdf_file = st.file_uploader("📄 Upload PDF", type=["pdf"])
+        pdf_file = st.file_uploader(
+            "📄 Upload PDF",
+            type=["pdf"],
+            key="sign_pdf_upload"
+        )
+
     with col2:
-        sig_file = st.file_uploader("✍️ Upload Signature", type=["png", "jpg", "jpeg"])
+        sig_file = st.file_uploader(
+            "✍️ Upload Signature Image",
+            type=["png", "jpg", "jpeg"],
+            key="sign_sig_upload"
+        )
 
     st.divider()
 
-    if not pdf_file or not sig_file:
-        st.info("👆 Upload both PDF and signature image to continue")
-        st.stop()
+    # ---------- Process when both files exist ----------
+    if pdf_file and sig_file:
 
-    # ---------- Prepare Assets ----------
-    sig_img = Image.open(sig_file)
-    sig_no_bg = remove_signature_background(sig_img)
+        # Process signature
+        sig_img = Image.open(sig_file)
+        sig_no_bg = remove_signature_background(sig_img)
 
-    sig_buf = io.BytesIO()
-    sig_no_bg.save(sig_buf, format="PNG")
-    sig_b64 = base64.b64encode(sig_buf.getvalue()).decode()
+        sig_buf = io.BytesIO()
+        sig_no_bg.save(sig_buf, format="PNG")
+        sig_b64 = base64.b64encode(sig_buf.getvalue()).decode()
 
-    pdf_b64 = base64.b64encode(pdf_file.getvalue()).decode()
+        # Get PDF as base64
+        pdf_b64 = base64.b64encode(pdf_file.getvalue()).decode()
 
-    st.success("✅ Files loaded. Drag signature onto pages and click Download.")
+        st.success(f"✅ Files loaded! Drag signature onto PDF pages, then click Download.")
 
-    # ---------- Browser-Only PDF Editor ----------
-    html = f"""
+        # ---------- Self-Contained HTML Editor ----------
+        html = f"""
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
 
 <style>
 body {{
-    margin:0; padding:10px;
-    background:#f4f6f8;
-    font-family:Arial,sans-serif;
+    margin: 0;
+    padding: 10px;
+    background: #f4f6f8;
+    font-family: Arial, sans-serif;
 }}
-.main {{
-    display:flex; gap:15px;
+.main-container {{
+    display: flex;
+    gap: 15px;
 }}
 .sidebar {{
-    width:230px;
-    background:#fff;
-    padding:15px;
-    border-radius:8px;
-    box-shadow:0 2px 8px rgba(0,0,0,.1);
-    position:sticky; top:10px;
+    width: 220px;
+    background: #fff;
+    padding: 15px;
+    border-radius: 8px;
+    position: sticky;
+    top: 10px;
+    height: fit-content;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }}
-.pages {{
-    flex:1; max-height:820px;
-    overflow-y:auto;
+.pages-container {{
+    flex: 1;
+    max-height: 800px;
+    overflow-y: auto;
+    padding: 10px;
 }}
-.page {{
-    background:#fff;
-    margin-bottom:20px;
-    border-radius:8px;
-    border:1px solid #ddd;
+.page-container {{
+    margin-bottom: 20px;
+    border: 2px solid #ddd;
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }}
-.header {{
-    background:#667eea;
-    color:#fff;
-    padding:10px;
-    font-weight:bold;
+.page-header {{
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 12px;
+    font-weight: bold;
+    font-size: 14px;
 }}
-.canvasWrap {{
-    position:relative;
+.canvas-wrapper {{
+    position: relative;
+    display: inline-block;
+    background: white;
+}}
+canvas {{
+    display: block;
 }}
 .signature {{
-    position:absolute;
-    cursor:move;
-    z-index:10;
+    position: absolute;
+    cursor: move;
+    z-index: 10;
+    transition: all 0.2s ease;
+    border: 2px dashed transparent;
+    border-radius: 4px;
+}}
+.signature:hover {{
+    transform: scale(1.05);
+    border-color: #4CAF50;
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
 }}
 .signature img {{
-    width:100%;
-    pointer-events:none;
+    width: 100%;
+    pointer-events: none;
+    display: block;
 }}
 button {{
-    width:100%;
-    padding:12px;
-    margin:6px 0;
-    border:none;
-    border-radius:6px;
-    font-weight:bold;
-    cursor:pointer;
+    width: 100%;
+    padding: 12px;
+    margin: 5px 0;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    transition: all 0.3s ease;
 }}
-.download {{ background:#667eea; color:#fff; }}
-.clear {{ background:#f44336; color:#fff; }}
+.btn-download {{
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}}
+.btn-download:hover {{
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+}}
+.btn-clear {{
+    background: #f44336;
+    color: white;
+}}
+.btn-clear:hover {{
+    background: #da190b;
+}}
+input[type="range"] {{
+    width: 100%;
+    margin: 10px 0;
+}}
+.drag-signature {{
+    width: 100%;
+    cursor: grab;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 5px;
+    background: #fafafa;
+    transition: all 0.3s ease;
+}}
+.drag-signature:hover {{
+    border-color: #667eea;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+}}
+.drag-signature:active {{
+    cursor: grabbing;
+}}
+.info-text {{
+    font-size: 12px;
+    color: #666;
+    line-height: 1.5;
+    margin-top: 10px;
+    padding: 10px;
+    background: #f0f4ff;
+    border-radius: 6px;
+    border-left: 3px solid #667eea;
+}}
+.size-value {{
+    display: inline-block;
+    background: #667eea;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+}}
 </style>
 </head>
 
 <body>
 
-<div class="main">
+<div class="main-container">
     <div class="sidebar">
-        <h3>🖋 Signature</h3>
-        <img id="sig" src="data:image/png;base64,{sig_b64}" draggable="true"
-             style="width:100%;border:1px solid #ddd;border-radius:6px;">
+        <h3 style="margin-top:0; color:#667eea;">🖋️ Signature Tool</h3>
+        
+        <label style="display:block; margin-bottom:8px; font-weight:bold; color:#333;">Drag this signature:</label>
+        <img id="sig" class="drag-signature" src="data:image/png;base64,{sig_b64}" draggable="true">
+        
         <br><br>
-        <label>Size</label>
-        <input type="range" id="size" min="30" max="200" value="100">
-        <br><br>
-        <button class="download" onclick="downloadPDF()">📥 Download Signed PDF</button>
-        <button class="clear" onclick="clearAll()">🗑 Clear All</button>
+        <label style="display:block; margin-bottom:5px; font-weight:bold; color:#333;">
+            Size: <span class="size-value" id="sizeValue">100%</span>
+        </label>
+        <input type="range" id="size" min="30" max="200" value="100" oninput="document.getElementById('sizeValue').textContent = this.value + '%'">
+        
+        <br>
+        <button class="btn-download" onclick="downloadSignedPDF()">📥 Download Signed PDF</button>
+        <button class="btn-clear" onclick="clearAll()">🗑️ Clear All</button>
+        
+        <div class="info-text">
+            💡 <strong>Quick Guide:</strong><br>
+            1. Drag signature onto PDF pages<br>
+            2. Adjust size with slider<br>
+            3. Click Download button
+        </div>
     </div>
 
-    <div class="pages" id="pages"></div>
+    <div class="pages-container" id="pagesContainer">
+        <p style="text-align:center; color:#999;">Loading PDF pages...</p>
+    </div>
 </div>
 
 <script>
-const pdfBytes = Uint8Array.from(atob("{pdf_b64}"), c => c.charCodeAt(0));
+const pdfData = Uint8Array.from(atob("{pdf_b64}"), c => c.charCodeAt(0));
 const sigBase64 = "{sig_b64}";
 let pdfDoc = null;
-let signatures = {{}};
+let allSignatures = {{}};
 
 const sig = document.getElementById("sig");
 const size = document.getElementById("size");
 
-sig.ondragstart = e => e.dataTransfer.setData("sig","1");
+sig.ondragstart = e => {{
+    e.dataTransfer.setData("sig", "1");
+}};
 
-pdfjsLib.getDocument({{data:pdfBytes}}).promise.then(async doc => {{
-    pdfDoc = doc;
-    const pages = document.getElementById("pages");
-    pages.innerHTML = "";
-
-    for(let i=1;i<=doc.numPages;i++) {{
-        const page = await doc.getPage(i);
-        const viewport = page.getViewport({{scale:1.4}});
-        const wrap = document.createElement("div");
-        wrap.className="page";
-        wrap.innerHTML=`
-            <div class="header">Page ${i}</div>
-            <div class="canvasWrap" data-page="${i}"
-                 style="width:${viewport.width}px;height:${viewport.height}px">
-                <canvas width="${viewport.width}" height="${viewport.height}"></canvas>
-            </div>`;
-        pages.appendChild(wrap);
-
-        const canvas = wrap.querySelector("canvas");
+async function renderAllPages() {{
+    const container = document.getElementById("pagesContainer");
+    container.innerHTML = '';
+    
+    for (let i = 1; i <= pdfDoc.numPages; i++) {{
+        const page = await pdfDoc.getPage(i);
+        const viewport = page.getViewport({{ scale: 1.5 }});
+        
+        const pageDiv = document.createElement("div");
+        pageDiv.className = "page-container";
+        pageDiv.innerHTML = `
+            <div class="page-header">📄 Page ${{i}} of ${{pdfDoc.numPages}}</div>
+            <div class="canvas-wrapper" data-page="${{i}}" style="width:${{viewport.width}}px; height:${{viewport.height}}px;">
+                <canvas width="${{viewport.width}}" height="${{viewport.height}}"></canvas>
+            </div>
+        `;
+        
+        container.appendChild(pageDiv);
+        
+        const canvas = pageDiv.querySelector("canvas");
+        const ctx = canvas.getContext("2d");
+        
         await page.render({{
-            canvasContext:canvas.getContext("2d"),
-            viewport:viewport
+            canvasContext: ctx,
+            viewport: viewport
         }}).promise;
-
-        signatures[i]=[];
-        const area = wrap.querySelector(".canvasWrap");
-
-        area.ondragover=e=>e.preventDefault();
-        area.ondrop=e=>{{
-            e.preventDefault();
-            const r=area.getBoundingClientRect();
-            const d=document.createElement("div");
-            d.className="signature";
-            d.style.left=(e.clientX-r.left)+"px";
-            d.style.top=(e.clientY-r.top)+"px";
-            d.style.width=(150*size.value/100)+"px";
-            const img=document.createElement("img");
-            img.src="data:image/png;base64,"+sigBase64;
-            d.appendChild(img);
-            area.appendChild(d);
-            signatures[i].push(d);
-
-            d.onmousedown=ev=>{{
-                let ox=ev.offsetX,oy=ev.offsetY;
-                document.onmousemove=m=>{{
-                    d.style.left=(m.clientX-r.left-ox)+"px";
-                    d.style.top=(m.clientY-r.top-oy)+"px";
-                }};
-                document.onmouseup=()=>document.onmousemove=null;
-            }};
-        }};
+        
+        setupDragDrop(pageDiv.querySelector(".canvas-wrapper"), i, viewport);
     }}
-});
-
-function clearAll(){{
-    Object.values(signatures).forEach(arr=>arr.forEach(s=>s.remove()));
-    signatures={{}};
 }}
 
-async function downloadPDF(){{
-    let count=0;
-    Object.values(signatures).forEach(a=>count+=a.length);
-    if(count===0){{ alert("Add at least one signature"); return; }}
-
-    const pdfLibDoc=await PDFLib.PDFDocument.load(pdfBytes);
-    const temp=document.createElement("canvas");
-    const ctx=temp.getContext("2d");
-    const sigImg=new Image();
-    sigImg.src="data:image/png;base64,"+sigBase64;
-    await new Promise(r=>sigImg.onload=r);
-
-    for(let i=1;i<=pdfDoc.numPages;i++) {{
-        const page=await pdfDoc.getPage(i);
-        const vp=page.getViewport({{scale:1.4}});
-        temp.width=vp.width; temp.height=vp.height;
-        await page.render({{canvasContext:ctx,viewport:vp}}).promise;
-
-        (signatures[i]||[]).forEach(s=>{{
-            ctx.drawImage(sigImg,
-                parseFloat(s.style.left),
-                parseFloat(s.style.top),
-                s.offsetWidth,
-                s.offsetHeight
-            );
+function setupDragDrop(wrapper, pageNum, viewport) {{
+    allSignatures[pageNum] = [];
+    
+    wrapper.ondragover = e => e.preventDefault();
+    
+    wrapper.ondrop = e => {{
+        e.preventDefault();
+        const rect = wrapper.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        const sigDiv = document.createElement("div");
+        sigDiv.className = "signature";
+        sigDiv.style.left = x + "px";
+        sigDiv.style.top = y + "px";
+        sigDiv.style.width = (150 * size.value / 100) + "px";
+        
+        const img = document.createElement("img");
+        img.src = sig.src;
+        sigDiv.appendChild(img);
+        
+        wrapper.appendChild(sigDiv);
+        
+        allSignatures[pageNum].push({{
+            element: sigDiv,
+            viewport: viewport
         }});
+        
+        makeDraggable(sigDiv);
+    }};
+}}
 
-        const png=await pdfLibDoc.embedPng(temp.toDataURL("image/png").split(",")[1]);
-        const p=pdfLibDoc.getPages()[i-1];
-        const {{width,height}}=p.getSize();
-        p.drawImage(png,{{x:0,y:0,width,height}});
+function makeDraggable(element) {{
+    element.onmousedown = ev => {{
+        ev.stopPropagation();
+        let startX = ev.clientX;
+        let startY = ev.clientY;
+        let startLeft = parseFloat(element.style.left);
+        let startTop = parseFloat(element.style.top);
+        
+        document.onmousemove = m => {{
+            m.preventDefault();
+            const deltaX = m.clientX - startX;
+            const deltaY = m.clientY - startY;
+            element.style.left = (startLeft + deltaX) + "px";
+            element.style.top = (startTop + deltaY) + "px";
+        }};
+        
+        document.onmouseup = () => {{
+            document.onmousemove = null;
+            document.onmouseup = null;
+        }};
+    }};
+}}
+
+function clearAll() {{
+    let count = 0;
+    Object.keys(allSignatures).forEach(pageNum => {{
+        count += allSignatures[pageNum].length;
+        allSignatures[pageNum].forEach(sig => sig.element.remove());
+        allSignatures[pageNum] = [];
+    }});
+    
+    if (count > 0) {{
+        alert("✅ Cleared " + count + " signature(s)!");
+    }} else {{
+        alert("ℹ️ No signatures to clear.");
     }}
+}}
 
-    const out=await pdfLibDoc.save();
-    const blob=new Blob([out],{{type:"application/pdf"}});
-    const a=document.createElement("a");
-    a.href=URL.createObjectURL(blob);
-    a.download="signed_document.pdf";
-    a.click();
-    URL.revokeObjectURL(a.href);
-}
+async function downloadSignedPDF() {{
+    try {{
+        // Check if any signatures exist
+        let totalSigs = 0;
+        Object.keys(allSignatures).forEach(pageNum => {{
+            totalSigs += allSignatures[pageNum].length;
+        }});
+        
+        if (totalSigs === 0) {{
+            alert("⚠️ Please drag at least one signature onto the PDF first!");
+            return;
+        }}
+        
+        // Show progress
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = "⏳ Generating PDF...";
+        btn.disabled = true;
+        
+        // Load original PDF with pdf-lib
+        const existingPdfBytes = Uint8Array.from(atob("{pdf_b64}"), c => c.charCodeAt(0));
+        const pdfLibDoc = await PDFLib.PDFDocument.load(existingPdfBytes);
+        
+        // Create a temporary canvas for rendering
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        // Process each page
+        for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {{
+            const page = await pdfDoc.getPage(pageNum);
+            const viewport = page.getViewport({{ scale: 1.5 }});
+            
+            tempCanvas.width = viewport.width;
+            tempCanvas.height = viewport.height;
+            
+            // Render PDF page to canvas
+            await page.render({{
+                canvasContext: tempCtx,
+                viewport: viewport
+            }}).promise;
+            
+            // Draw signatures on top if they exist
+            const signatures = allSignatures[pageNum] || [];
+            if (signatures.length > 0) {{
+                // Load signature image
+                const sigImg = new Image();
+                sigImg.src = "data:image/png;base64," + sigBase64;
+                await new Promise((resolve) => {{
+                    sigImg.onload = resolve;
+                }});
+                
+                signatures.forEach(sig => {{
+                    const element = sig.element;
+                    const x = parseFloat(element.style.left);
+                    const y = parseFloat(element.style.top);
+                    const w = element.offsetWidth;
+                    const h = element.offsetHeight;
+                    
+                    // Draw signature image on canvas
+                    tempCtx.drawImage(sigImg, x, y, w, h);
+                }});
+            }}
+            
+            // Convert canvas to PNG and embed in PDF
+            const pngDataUrl = tempCanvas.toDataURL("image/png");
+            const pngImageBytes = pngDataUrl.split(',')[1];
+            const pngImage = await pdfLibDoc.embedPng(pngImageBytes);
+            
+            const pdfPage = pdfLibDoc.getPages()[pageNum - 1];
+            const {{ width, height }} = pdfPage.getSize();
+            
+            // Draw the combined image over the PDF page
+            pdfPage.drawImage(pngImage, {{
+                x: 0,
+                y: 0,
+                width: width,
+                height: height
+            }});
+        }}
+        
+        // Save and download
+        const pdfBytes = await pdfLibDoc.save();
+        const blob = new Blob([pdfBytes], {{ type: "application/pdf" }});
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "signed_document.pdf";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        // Reset button
+        btn.textContent = originalText;
+        btn.disabled = false;
+        
+        alert("✅ Signed PDF with " + totalSigs + " signature(s) downloaded successfully!");
+    }} catch (error) {{
+        console.error("Download error:", error);
+        alert("❌ Error: " + error.message);
+        event.target.textContent = "📥 Download Signed PDF";
+        event.target.disabled = false;
+    }}
+}}
+
+// Initialize
+pdfjsLib.getDocument({{ data: pdfData }}).promise.then(doc => {{
+    pdfDoc = doc;
+    renderAllPages();
+}}).catch(error => {{
+    document.getElementById("pagesContainer").innerHTML = 
+        '<p style="color:red; text-align:center;">❌ Error loading PDF: ' + error.message + '</p>';
+}});
 </script>
+
 </body>
 </html>
 """
 
-    components.html(html, height=900, scrolling=True)
+        components.html(html, height=900, scrolling=True)
 
+    else:
+        st.info("👆 Upload both PDF and signature image to get started")
 
 
 #######################################################################
@@ -2674,6 +2894,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
