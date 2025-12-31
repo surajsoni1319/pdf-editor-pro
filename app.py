@@ -1941,20 +1941,13 @@ elif feature == "🔀 Reorder Pages":
 if feature == "✍️ Sign PDF":
 
     import streamlit as st
-    from pypdf import PdfReader, PdfWriter
-    from pdf2image import convert_from_bytes
-    from reportlab.pdfgen import canvas
     from PIL import Image
-    import streamlit.components.v1 as components
     import numpy as np
-    import io, tempfile, base64, os
+    import io, base64
+    import streamlit.components.v1 as components
 
     st.header("✍️ Sign PDF – Drag & Drop Signature")
     st.write("Upload a PDF and a signature image, then drag the signature onto the document.")
-
-    # Initialize session state for signatures
-    if 'signatures_applied' not in st.session_state:
-        st.session_state.signatures_applied = None
 
     # ---------- Background Removal ----------
     def remove_signature_background(img, threshold=230):
@@ -1995,337 +1988,349 @@ if feature == "✍️ Sign PDF":
         sig_no_bg.save(sig_buf, format="PNG")
         sig_b64 = base64.b64encode(sig_buf.getvalue()).decode()
 
-        # Read PDF info
-        reader = PdfReader(io.BytesIO(pdf_file.getvalue()))
-        total_pages = len(reader.pages)
+        # Get PDF as base64
+        pdf_b64 = base64.b64encode(pdf_file.getvalue()).decode()
 
-        st.success(f"✅ PDF loaded successfully ({total_pages} page(s))")
+        st.success(f"✅ Files loaded successfully!")
 
-        # Convert ALL pages to images
-        images = convert_from_bytes(pdf_file.getvalue(), dpi=150)
-        
-        # Create base64 for all pages
-        pages_b64 = []
-        pages_info = []
-        
-        for i, img in enumerate(images):
-            pdf_buf = io.BytesIO()
-            img.save(pdf_buf, format="PNG")
-            pages_b64.append(base64.b64encode(pdf_buf.getvalue()).decode())
-            
-            page = reader.pages[i]
-            pages_info.append({
-                'width': float(page.mediabox.width),
-                'height': float(page.mediabox.height)
-            })
-
-        # ---------- HTML + JS (ALL PAGES VIEW) ----------
-        pages_html = ""
-        for i, page_b64 in enumerate(pages_b64):
-            pages_html += f'''
-                <div class="page-container" data-page="{i}" style="margin-bottom:20px;border:2px solid #ddd;background:#fff;page-break-after:always;">
-                    <div style="background:#f0f0f0;padding:8px;font-weight:bold;border-bottom:1px solid #ddd;">
-                        Page {i + 1} of {total_pages}
-                    </div>
-                    <div class="canvas" data-page="{i}" style="position:relative;">
-                        <img class="pdf-page" data-page="{i}" src="data:image/png;base64,{page_b64}" style="display:block;width:100%;">
-                    </div>
-                </div>
-            '''
-
+        # ---------- HTML + JS (Self-Contained PDF Editor) ----------
         html = f"""
-        <html>
-        <head>
-            <style>
-                body {{
-                    margin:0;
-                    padding:10px;
-                    background:#f4f6f8;
-                    font-family: Arial, sans-serif;
-                }}
-                .main-container {{
-                    display:flex;
-                    gap:15px;
-                }}
-                .sidebar {{
-                    width:220px;
-                    background:#fff;
-                    padding:15px;
-                    border-radius:8px;
-                    position:sticky;
-                    top:10px;
-                    height:fit-content;
-                }}
-                .pages-container {{
-                    flex:1;
-                    max-height:800px;
-                    overflow-y:auto;
-                    padding:10px;
-                }}
-                button {{
-                    width:100%;
-                    padding:10px;
-                    margin:5px 0;
-                    border:none;
-                    border-radius:5px;
-                    cursor:pointer;
-                    font-size:14px;
-                    font-weight:bold;
-                }}
-                .btn-apply {{
-                    background:#4CAF50;
-                    color:white;
-                }}
-                .btn-apply:hover {{
-                    background:#45a049;
-                }}
-                .btn-clear {{
-                    background:#f44336;
-                    color:white;
-                }}
-                .btn-clear:hover {{
-                    background:#da190b;
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="main-container">
-                <div class="sidebar">
-                    <b>🖋 Drag Signature</b><br><br>
-                    <img id="sig" src="data:image/png;base64,{sig_b64}"
-                         draggable="true" style="width:100%;cursor:grab;border:1px solid #ddd;">
-                    <br><br>
-                    <label><b>Size</b></label><br>
-                    <input type="range" id="size" min="30" max="200" value="100" style="width:100%;">
-                    <br><br>
-                    <button class="btn-apply" onclick="apply()">💾 Save Signatures</button>
-                    <button class="btn-clear" onclick="clearAll()">🗑 Clear All</button>
-                    <br><br>
-                    <p style="font-size:12px;color:#666;">💡 After dragging signatures, click "Save Signatures" before downloading.</p>
-                </div>
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
 
-                <div class="pages-container">
-                    {pages_html}
-                </div>
+<style>
+body {{
+    margin: 0;
+    padding: 10px;
+    background: #f4f6f8;
+    font-family: Arial, sans-serif;
+}}
+.main-container {{
+    display: flex;
+    gap: 15px;
+}}
+.sidebar {{
+    width: 220px;
+    background: #fff;
+    padding: 15px;
+    border-radius: 8px;
+    position: sticky;
+    top: 10px;
+    height: fit-content;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}}
+.pages-container {{
+    flex: 1;
+    max-height: 800px;
+    overflow-y: auto;
+    padding: 10px;
+}}
+.page-container {{
+    margin-bottom: 20px;
+    border: 2px solid #ddd;
+    background: #fff;
+    border-radius: 4px;
+    overflow: hidden;
+}}
+.page-header {{
+    background: #f0f0f0;
+    padding: 8px;
+    font-weight: bold;
+    border-bottom: 1px solid #ddd;
+}}
+.canvas-wrapper {{
+    position: relative;
+    display: inline-block;
+}}
+canvas {{
+    display: block;
+    cursor: crosshair;
+}}
+.signature {{
+    position: absolute;
+    cursor: move;
+    z-index: 10;
+    transition: transform 0.1s ease;
+    border: 2px dashed transparent;
+}}
+.signature:hover {{
+    transform: scale(1.05);
+    border-color: #4CAF50;
+}}
+.signature img {{
+    width: 100%;
+    pointer-events: none;
+}}
+button {{
+    width: 100%;
+    padding: 10px;
+    margin: 5px 0;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+}}
+.btn-download {{
+    background: #4CAF50;
+    color: white;
+}}
+.btn-download:hover {{
+    background: #45a049;
+}}
+.btn-clear {{
+    background: #f44336;
+    color: white;
+}}
+.btn-clear:hover {{
+    background: #da190b;
+}}
+input[type="range"] {{
+    width: 100%;
+}}
+.drag-signature {{
+    width: 100%;
+    cursor: grab;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}}
+.drag-signature:active {{
+    cursor: grabbing;
+}}
+</style>
+</head>
+
+<body>
+
+<div class="main-container">
+    <div class="sidebar">
+        <b>🖋 Drag Signature</b><br><br>
+        <img id="sig" class="drag-signature" src="data:image/png;base64,{sig_b64}" draggable="true">
+        <br><br>
+        <label><b>Size</b></label><br>
+        <input type="range" id="size" min="30" max="200" value="100">
+        <br><br>
+        <button class="btn-download" onclick="downloadSignedPDF()">📥 Download Signed PDF</button>
+        <button class="btn-clear" onclick="clearAll()">🗑 Clear All Signatures</button>
+        <br><br>
+        <p style="font-size:12px;color:#666;">💡 Drag signature onto PDF pages. Signatures are saved automatically when you download.</p>
+    </div>
+
+    <div class="pages-container" id="pagesContainer">
+        <!-- Pages will be rendered here -->
+    </div>
+</div>
+
+<script>
+const pdfData = Uint8Array.from(atob("{pdf_b64}"), c => c.charCodeAt(0));
+const sigBase64 = "{sig_b64}";
+let pdfDoc = null;
+let allSignatures = {{}};
+
+const sig = document.getElementById("sig");
+const size = document.getElementById("size");
+
+sig.ondragstart = e => {{
+    e.dataTransfer.setData("sig", "1");
+}};
+
+async function renderAllPages() {{
+    const container = document.getElementById("pagesContainer");
+    
+    for (let i = 1; i <= pdfDoc.numPages; i++) {{
+        const page = await pdfDoc.getPage(i);
+        const viewport = page.getViewport({{ scale: 1.5 }});
+        
+        const pageDiv = document.createElement("div");
+        pageDiv.className = "page-container";
+        pageDiv.innerHTML = `
+            <div class="page-header">Page ${{i}} of ${{pdfDoc.numPages}}</div>
+            <div class="canvas-wrapper" data-page="${{i}}">
+                <canvas></canvas>
             </div>
-
-            <script>
-                let allSignatures = {{}};
-                const sig = document.getElementById("sig");
-                const size = document.getElementById("size");
-                const canvases = document.querySelectorAll(".canvas");
-
-                sig.ondragstart = e => e.dataTransfer.setData("sig", "1");
-
-                canvases.forEach(canvas => {{
-                    const pageNum = canvas.getAttribute("data-page");
-                    allSignatures[pageNum] = [];
-
-                    canvas.ondragover = e => e.preventDefault();
-
-                    canvas.ondrop = e => {{
-                        e.preventDefault();
-                        const rect = canvas.getBoundingClientRect();
-                        const x = e.clientX - rect.left;
-                        const y = e.clientY - rect.top;
-                        
-                        const div = document.createElement("div");
-                        div.style.position = "absolute";
-                        div.style.left = x + "px";
-                        div.style.top = y + "px";
-                        div.style.width = (150 * size.value / 100) + "px";
-                        div.style.cursor = "move";
-                        div.style.zIndex = "10";
-                        div.style.transition = "transform 0.1s ease";
-
-                        const img = document.createElement("img");
-                        img.src = sig.src;
-                        img.style.width = "100%";
-                        img.style.pointerEvents = "none";
-                        div.appendChild(img);
-                        canvas.appendChild(div);
-                        allSignatures[pageNum].push(div);
-
-                        // Smooth hover effect
-                        div.onmouseenter = () => {{
-                            div.style.transform = "scale(1.05)";
-                        }};
-                        div.onmouseleave = () => {{
-                            div.style.transform = "scale(1)";
-                        }};
-
-                        div.onmousedown = ev => {{
-                            ev.stopPropagation();
-                            let startX = ev.clientX;
-                            let startY = ev.clientY;
-                            let startLeft = parseFloat(div.style.left);
-                            let startTop = parseFloat(div.style.top);
-                            
-                            document.onmousemove = m => {{
-                                m.preventDefault();
-                                const deltaX = m.clientX - startX;
-                                const deltaY = m.clientY - startY;
-                                div.style.left = (startLeft + deltaX) + "px";
-                                div.style.top = (startTop + deltaY) + "px";
-                            }};
-                            document.onmouseup = () => {{
-                                document.onmousemove = null;
-                                document.onmouseup = null;
-                            }};
-                        }};
-                    }};
-                }});
-
-                function clearAll() {{
-                    Object.keys(allSignatures).forEach(pageNum => {{
-                        allSignatures[pageNum].forEach(s => s.remove());
-                        allSignatures[pageNum] = [];
-                    }});
-                }}
-
-                function apply() {{
-                    const pagesInfo = {pages_info};
-                    const result = {{}};
-                    let totalSigs = 0;
-
-                    Object.keys(allSignatures).forEach(pageNum => {{
-                        const canvas = document.querySelector('.canvas[data-page="' + pageNum + '"]');
-                        const pdfImg = canvas.querySelector('.pdf-page');
-                        const pageInfo = pagesInfo[parseInt(pageNum)];
-
-                        if (allSignatures[pageNum].length > 0) {{
-                            totalSigs += allSignatures[pageNum].length;
-                            result[pageNum] = allSignatures[pageNum].map(function(s) {{
-                                return {{
-                                    x: (parseFloat(s.style.left) / pdfImg.offsetWidth) * pageInfo.width,
-                                    y: (parseFloat(s.style.top) / pdfImg.offsetHeight) * pageInfo.height,
-                                    w: (parseFloat(s.offsetWidth) / pdfImg.offsetWidth) * pageInfo.width,
-                                    h: (parseFloat(s.offsetHeight) / pdfImg.offsetHeight) * pageInfo.height
-                                }};
-                            }});
-                        }}
-                    }});
-
-                    if (totalSigs > 0) {{
-                        // Send data to Streamlit
-                        window.parent.postMessage(
-                            {{ type: "streamlit:setComponentValue", value: result }},
-                            "*"
-                        );
-                        
-                        // Force Streamlit rerun after a short delay to ensure data is received
-                        setTimeout(function() {{
-                            window.parent.postMessage(
-                                {{ type: "streamlit:setComponentValue", value: result }},
-                                "*"
-                            );
-                        }}, 100);
-                        
-                        alert("✅ " + totalSigs + " signature(s) saved! You can now download the PDF.");
-                    }} else {{
-                        alert("⚠️ Please drag at least one signature onto the PDF first!");
-                    }}
-                }}
-                
-                // Listen for download request from Streamlit
-                window.addEventListener('message', function(event) {{
-                    if (event.data && event.data.type === 'requestSignatures') {{
-                        apply();
-                    }}
-                }});
-            </script>
-        </body>
-        </html>
-        """
-
-        # Capture signatures from the component
-        sig_positions = components.html(html, height=850)
-
-        # Store signatures when received from JavaScript
-        if sig_positions:
-            if isinstance(sig_positions, dict) and any(sig_positions.values()):
-                st.session_state.signatures_applied = sig_positions
-                st.session_state.has_signatures = True
-                # Force rerun to update UI
-                if not st.session_state.get('ui_updated', False):
-                    st.session_state.ui_updated = True
-                    st.rerun()
-            st.session_state.ui_updated = False
-
-        # ---------- Download Signed PDF (ALWAYS VISIBLE) ----------
-        st.divider()
-        st.subheader("📥 Download Signed PDF")
+        `;
         
-        # Check if signatures have been saved
-        if st.session_state.get('has_signatures', False):
-            st.success(f"✅ Signatures saved! Click below to download your signed PDF.")
-        else:
-            st.info("ℹ️ Drag signatures onto the PDF pages, then click '💾 Save Signatures' in the sidebar.")
+        container.appendChild(pageDiv);
         
-        if st.button("⬇️ Download Signed PDF", type="primary", use_container_width=True):
-            # Get current signature positions
-            current_sigs = st.session_state.get('signatures_applied', {})
+        const canvas = pageDiv.querySelector("canvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        
+        await page.render({{
+            canvasContext: ctx,
+            viewport: viewport
+        }}).promise;
+        
+        setupDragDrop(pageDiv.querySelector(".canvas-wrapper"), i, viewport);
+    }}
+}}
+
+function setupDragDrop(wrapper, pageNum, viewport) {{
+    allSignatures[pageNum] = [];
+    
+    wrapper.ondragover = e => e.preventDefault();
+    
+    wrapper.ondrop = e => {{
+        e.preventDefault();
+        const rect = wrapper.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        const sigDiv = document.createElement("div");
+        sigDiv.className = "signature";
+        sigDiv.style.left = x + "px";
+        sigDiv.style.top = y + "px";
+        sigDiv.style.width = (150 * size.value / 100) + "px";
+        
+        const img = document.createElement("img");
+        img.src = sig.src;
+        sigDiv.appendChild(img);
+        
+        wrapper.appendChild(sigDiv);
+        
+        allSignatures[pageNum].push({{
+            element: sigDiv,
+            viewport: viewport
+        }});
+        
+        makeDraggable(sigDiv);
+    }};
+}}
+
+function makeDraggable(element) {{
+    element.onmousedown = ev => {{
+        ev.stopPropagation();
+        let startX = ev.clientX;
+        let startY = ev.clientY;
+        let startLeft = parseFloat(element.style.left);
+        let startTop = parseFloat(element.style.top);
+        
+        document.onmousemove = m => {{
+            m.preventDefault();
+            const deltaX = m.clientX - startX;
+            const deltaY = m.clientY - startY;
+            element.style.left = (startLeft + deltaX) + "px";
+            element.style.top = (startTop + deltaY) + "px";
+        }};
+        
+        document.onmouseup = () => {{
+            document.onmousemove = null;
+            document.onmouseup = null;
+        }};
+    }};
+}}
+
+function clearAll() {{
+    Object.keys(allSignatures).forEach(pageNum => {{
+        allSignatures[pageNum].forEach(sig => sig.element.remove());
+        allSignatures[pageNum] = [];
+    }});
+    alert("✅ All signatures cleared!");
+}}
+
+async function downloadSignedPDF() {{
+    try {{
+        // Check if any signatures exist
+        let hasSignatures = false;
+        Object.keys(allSignatures).forEach(pageNum => {{
+            if (allSignatures[pageNum].length > 0) hasSignatures = true;
+        }});
+        
+        if (!hasSignatures) {{
+            alert("⚠️ Please drag at least one signature onto the PDF first!");
+            return;
+        }}
+        
+        // Load signature image
+        const sigImg = new Image();
+        sigImg.src = "data:image/png;base64," + sigBase64;
+        await new Promise((resolve, reject) => {{
+            sigImg.onload = resolve;
+            sigImg.onerror = reject;
+        }});
+        
+        // Load PDF with pdf-lib
+        const existingPdfBytes = Uint8Array.from(atob("{pdf_b64}"), c => c.charCodeAt(0));
+        const pdfLibDoc = await PDFLib.PDFDocument.load(existingPdfBytes);
+        
+        // Embed signature image
+        const sigImageBytes = await fetch("data:image/png;base64," + sigBase64).then(r => r.arrayBuffer());
+        const sigImage = await pdfLibDoc.embedPng(sigImageBytes);
+        
+        // Add signatures to each page
+        for (let pageNum = 1; pageNum <= pdfLibDoc.getPageCount(); pageNum++) {{
+            const signatures = allSignatures[pageNum] || [];
             
-            # Check if we have any signatures
-            if current_sigs and isinstance(current_sigs, dict) and any(current_sigs.values()):
-                with st.spinner("Generating signed PDF..."):
-                    try:
-                        writer = PdfWriter()
+            if (signatures.length > 0) {{
+                const page = pdfLibDoc.getPages()[pageNum - 1];
+                const {{ width: pageWidth, height: pageHeight }} = page.getSize();
+                
+                signatures.forEach(sig => {{
+                    const element = sig.element;
+                    const viewport = sig.viewport;
+                    
+                    // Get signature position and size from DOM
+                    const x = parseFloat(element.style.left);
+                    const y = parseFloat(element.style.top);
+                    const w = parseFloat(element.offsetWidth);
+                    const h = parseFloat(element.offsetHeight);
+                    
+                    // Convert from canvas coordinates to PDF coordinates
+                    const pdfX = (x / viewport.width) * pageWidth;
+                    const pdfY = pageHeight - ((y / viewport.height) * pageHeight) - ((h / viewport.height) * pageHeight);
+                    const pdfW = (w / viewport.width) * pageWidth;
+                    const pdfH = (h / viewport.height) * pageHeight;
+                    
+                    // Draw signature on PDF
+                    page.drawImage(sigImage, {{
+                        x: pdfX,
+                        y: pdfY,
+                        width: pdfW,
+                        height: pdfH
+                    }});
+                }});
+            }}
+        }}
+        
+        // Save and download
+        const pdfBytes = await pdfLibDoc.save();
+        const blob = new Blob([pdfBytes], {{ type: "application/pdf" }});
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "signed_document.pdf";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        alert("✅ PDF downloaded successfully!");
+    }} catch (error) {{
+        console.error("Download error:", error);
+        alert("❌ Error downloading PDF: " + error.message);
+    }}
+}}
 
-                        tmp_sig = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-                        sig_no_bg.save(tmp_sig.name)
+// Initialize
+pdfjsLib.getDocument({{ data: pdfData }}).promise.then(doc => {{
+    pdfDoc = doc;
+    renderAllPages();
+}});
+</script>
 
-                        for i, page in enumerate(reader.pages):
-                            page_signatures = current_sigs.get(str(i), [])
-                            
-                            if page_signatures:
-                                packet = io.BytesIO()
-                                page_w = float(page.mediabox.width)
-                                page_h = float(page.mediabox.height)
-                                can = canvas.Canvas(packet, pagesize=(page_w, page_h))
+</body>
+</html>
+"""
 
-                                for p in page_signatures:
-                                    can.drawImage(
-                                        tmp_sig.name,
-                                        p["x"],
-                                        page_h - p["y"] - p["h"],
-                                        p["w"],
-                                        p["h"],
-                                        mask="auto"
-                                    )
-
-                                can.save()
-                                packet.seek(0)
-                                overlay = PdfReader(packet)
-                                page.merge_page(overlay.pages[0])
-
-                            writer.add_page(page)
-
-                        os.unlink(tmp_sig.name)
-
-                        out = io.BytesIO()
-                        writer.write(out)
-                        out.seek(0)
-
-                        st.success("✅ PDF signed successfully!")
-                        st.download_button(
-                            "📥 Click Here to Download",
-                            out,
-                            file_name="signed_document.pdf",
-                            mime="application/pdf",
-                            use_container_width=True,
-                            key="final_download"
-                        )
-                    except Exception as e:
-                        st.error(f"❌ Error generating PDF: {str(e)}")
-            else:
-                st.warning("⚠️ No signatures saved yet! Please drag signatures onto the PDF and click '💾 Save Signatures' in the sidebar first.")
+        components.html(html, height=900, scrolling=True)
 
     else:
         st.info("👆 Upload both PDF and signature to continue")
-        # Reset session state when files are removed
-        if 'signatures_applied' in st.session_state:
-            st.session_state.signatures_applied = None
 
 
 
@@ -2341,6 +2346,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
