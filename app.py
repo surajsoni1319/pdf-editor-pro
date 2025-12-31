@@ -2207,10 +2207,20 @@ if feature == "✍️ Sign PDF":
                     }});
 
                     if (totalSigs > 0) {{
+                        // Send data to Streamlit
                         window.parent.postMessage(
                             {{ type: "streamlit:setComponentValue", value: result }},
                             "*"
                         );
+                        
+                        // Force Streamlit rerun after a short delay to ensure data is received
+                        setTimeout(function() {{
+                            window.parent.postMessage(
+                                {{ type: "streamlit:setComponentValue", value: result }},
+                                "*"
+                            );
+                        }}, 100);
+                        
                         alert("✅ " + totalSigs + " signature(s) saved! You can now download the PDF.");
                     }} else {{
                         alert("⚠️ Please drag at least one signature onto the PDF first!");
@@ -2228,13 +2238,19 @@ if feature == "✍️ Sign PDF":
         </html>
         """
 
-        # Auto-capture signatures on any interaction
+        # Capture signatures from the component
         sig_positions = components.html(html, height=850)
 
-        # Always store the latest positions automatically
-        if sig_positions and isinstance(sig_positions, dict) and sig_positions:
-            st.session_state.signatures_applied = sig_positions
-            st.session_state.has_signatures = True
+        # Store signatures when received from JavaScript
+        if sig_positions:
+            if isinstance(sig_positions, dict) and any(sig_positions.values()):
+                st.session_state.signatures_applied = sig_positions
+                st.session_state.has_signatures = True
+                # Force rerun to update UI
+                if not st.session_state.get('ui_updated', False):
+                    st.session_state.ui_updated = True
+                    st.rerun()
+            st.session_state.ui_updated = False
 
         # ---------- Download Signed PDF (ALWAYS VISIBLE) ----------
         st.divider()
@@ -2325,6 +2341,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
