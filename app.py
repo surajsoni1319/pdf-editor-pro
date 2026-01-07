@@ -93,7 +93,7 @@ feature = st.sidebar.radio(
         "📸 PDF to Images",
         "✨ Highlight Text",
         "🔀 Reorder Pages",
-        "📊 PPT to PDF",
+        "🔐 Protect / Unlock PDF",
         "✍️ Sign PDF"
 
     ]
@@ -2407,91 +2407,133 @@ pdfjsLib.getDocument({{ data: pdfData }}).promise.then(doc => {{
 
 
 # ======================================================
-# Feature 13: PPT to PDF
+# Feature 13: Password Protect / Unlock PDF
 # ======================================================
-elif feature == "📊 PPT to PDF":
-    st.header("📊 PPT to PDF Converter")
-    st.write("Convert PowerPoint (.pptx) slides into a PDF document.")
-
-    st.info(
-        "ℹ️ Slides are converted to images and then combined into a PDF. "
-        "Text will not be selectable."
-    )
+elif feature == "🔐 Protect / Unlock PDF":
+    st.header("🔐 Password Protect / Unlock PDF")
+    st.write("Add or remove password protection and control PDF permissions.")
 
     uploaded_file = st.file_uploader(
-        "Upload PowerPoint file (.pptx)",
-        type=["pptx"]
+        "Upload PDF",
+        type=["pdf"]
     )
 
     if uploaded_file:
-        try:
-            from pptx import Presentation
-            from reportlab.lib.pagesizes import landscape, A4
-            from reportlab.pdfgen import canvas
-            import tempfile
+        from PyPDF2 import PdfReader, PdfWriter
 
-            if st.button("📊 Convert to PDF", use_container_width=True):
-                with st.spinner("Converting PPT to PDF..."):
+        action = st.radio(
+            "Select action",
+            [
+                "🔒 Add Password",
+                "🔓 Remove Password"
+            ],
+            horizontal=True
+        )
 
-                    with tempfile.TemporaryDirectory() as tmpdir:
-                        ppt_path = os.path.join(tmpdir, uploaded_file.name)
+        # ==================================================
+        # ADD PASSWORD
+        # ==================================================
+        if action == "🔒 Add Password":
+            user_pwd = st.text_input("User password (required)", type="password")
+            owner_pwd = st.text_input(
+                "Owner password (optional)",
+                type="password",
+                help="Owner password controls permissions"
+            )
 
-                        # Save PPT
-                        with open(ppt_path, "wb") as f:
-                            f.write(uploaded_file.getbuffer())
+            st.markdown("### 🔐 Permissions")
+            allow_print = st.checkbox("Allow printing", value=True)
+            allow_copy = st.checkbox("Allow copying text", value=False)
+            allow_modify = st.checkbox("Allow modifying document", value=False)
 
-                        prs = Presentation(ppt_path)
+            if st.button("🔒 Protect PDF", use_container_width=True):
+                if not user_pwd:
+                    st.warning("⚠️ User password is required.")
+                    st.stop()
 
-                        pdf_path = ppt_path.replace(".pptx", ".pdf")
-                        c = canvas.Canvas(pdf_path, pagesize=landscape(A4))
-                        page_width, page_height = landscape(A4)
+                try:
+                    reader = PdfReader(uploaded_file)
+                    writer = PdfWriter()
 
-                        for slide in prs.slides:
-                            # Render slide as image
-                            img_path = os.path.join(tmpdir, f"slide_{slide.slide_id}.png")
+                    for page in reader.pages:
+                        writer.add_page(page)
 
-                            # Export slide to image using Pillow workaround
-                            # (python-pptx cannot export directly, so we rasterize shapes)
-                            slide_width = prs.slide_width
-                            slide_height = prs.slide_height
+                    permissions = []
+                    if allow_print:
+                        permissions.append("print")
+                    if allow_copy:
+                        permissions.append("copy")
+                    if allow_modify:
+                        permissions.append("modify")
 
-                            img = Image.new(
-                                "RGB",
-                                (int(slide_width / 9525), int(slide_height / 9525)),
-                                "white"
-                            )
+                    writer.encrypt(
+                        user_password=user_pwd,
+                        owner_password=owner_pwd or user_pwd,
+                        permissions=permissions
+                    )
 
-                            img.save(img_path)
+                    output = io.BytesIO()
+                    writer.write(output)
+                    output.seek(0)
 
-                            # Draw image into PDF
-                            c.drawImage(
-                                img_path,
-                                0,
-                                0,
-                                width=page_width,
-                                height=page_height,
-                                preserveAspectRatio=True
-                            )
-                            c.showPage()
+                    st.success("✅ PDF protected successfully!")
 
-                        c.save()
+                    st.download_button(
+                        "⬇️ Download Protected PDF",
+                        output.getvalue(),
+                        file_name="protected.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
 
-                        with open(pdf_path, "rb") as f:
-                            pdf_bytes = f.read()
+                except Exception as e:
+                    st.error("❌ Failed to protect PDF.")
+                    st.text_area("Error details", str(e))
 
-                st.success("✅ PPT converted to PDF successfully!")
+        # ==================================================
+        # REMOVE PASSWORD
+        # ==================================================
+        else:
+            current_pwd = st.text_input(
+                "Enter existing PDF password",
+                type="password"
+            )
 
-                st.download_button(
-                    "⬇️ Download PDF",
-                    pdf_bytes,
-                    file_name=uploaded_file.name.replace(".pptx", ".pdf"),
-                    mime="application/pdf",
-                    use_container_width=True
-                )
+            if st.button("🔓 Unlock PDF", use_container_width=True):
+                if not current_pwd:
+                    st.warning("⚠️ Password is required to unlock.")
+                    st.stop()
 
-        except Exception as e:
-            st.error("❌ PPT to PDF conversion failed.")
-            st.text_area("Error details", str(e))
+                try:
+                    reader = PdfReader(uploaded_file)
+
+                    if reader.is_encrypted:
+                        if not reader.decrypt(current_pwd):
+                            st.error("❌ Incorrect password.")
+                            st.stop()
+
+                    writer = PdfWriter()
+                    for page in reader.pages:
+                        writer.add_page(page)
+
+                    output = io.BytesIO()
+                    writer.write(output)
+                    output.seek(0)
+
+                    st.success("✅ PDF unlocked successfully!")
+
+                    st.download_button(
+                        "⬇️ Download Unlocked PDF",
+                        output.getvalue(),
+                        file_name="unlocked.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+
+                except Exception as e:
+                    st.error("❌ Failed to unlock PDF.")
+                    st.text_area("Error details", str(e))
+
 
 
 #######################################################################
@@ -2506,17 +2548,3 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
