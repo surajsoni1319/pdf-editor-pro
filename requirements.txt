@@ -7,14 +7,12 @@ pytesseract
 img2pdf
 openpyxl
 pandas
-
 pypdf
 opencv-python
 numpy
+python-pptx
 
-docx2pdf
-python-docx
-pypandoc
+
 
 
 
