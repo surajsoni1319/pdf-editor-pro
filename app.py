@@ -2407,15 +2407,15 @@ pdfjsLib.getDocument({{ data: pdfData }}).promise.then(doc => {{
 
 
 # ======================================================
-# Feature 13: Word to PDF
+# Feature: Word to PDF (pypandoc)
 # ======================================================
 elif feature == "📄 Word to PDF":
-    st.header("📄 Word to PDF Converter")
-    st.write("Convert Microsoft Word (.docx) files into PDF.")
+    st.header("📄 Word to PDF (Pandoc)")
+    st.write("Convert DOCX to PDF using Pandoc (open-source).")
 
     st.warning(
-        "⚠️ This feature works on **local systems (Windows/Mac)**. "
-        "It may not work on Streamlit Cloud or Linux servers."
+        "⚠️ Requires Pandoc + LaTeX installed on the system. "
+        "May not work on Streamlit Cloud."
     )
 
     uploaded_file = st.file_uploader(
@@ -2425,40 +2425,48 @@ elif feature == "📄 Word to PDF":
 
     if uploaded_file:
         try:
-            from docx2pdf import convert
+            import pypandoc
             import tempfile
 
             with tempfile.TemporaryDirectory() as tmpdir:
-                word_path = os.path.join(tmpdir, uploaded_file.name)
-                pdf_path = word_path.replace(".docx", ".pdf")
+                docx_path = os.path.join(tmpdir, uploaded_file.name)
+                pdf_path = docx_path.replace(".docx", ".pdf")
 
                 # Save uploaded file
-                with open(word_path, "wb") as f:
+                with open(docx_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
 
                 if st.button("📄 Convert to PDF", use_container_width=True):
-                    with st.spinner("Converting Word to PDF..."):
-                        convert(word_path, pdf_path)
+                    with st.spinner("Converting using Pandoc..."):
+                        pypandoc.convert_file(
+                            docx_path,
+                            "pdf",
+                            outputfile=pdf_path,
+                            extra_args=["--pdf-engine=pdflatex"]
+                        )
 
                     if os.path.exists(pdf_path):
-                        with open(pdf_path, "rb") as pdf_file:
-                            pdf_bytes = pdf_file.read()
+                        with open(pdf_path, "rb") as f:
+                            pdf_bytes = f.read()
 
                         st.success("✅ Conversion successful!")
 
                         st.download_button(
-                            label="⬇️ Download PDF",
-                            data=pdf_bytes,
+                            "⬇️ Download PDF",
+                            pdf_bytes,
                             file_name=uploaded_file.name.replace(".docx", ".pdf"),
                             mime="application/pdf",
                             use_container_width=True
                         )
                     else:
-                        st.error("❌ Conversion failed. PDF not generated.")
+                        st.error("❌ PDF not generated.")
 
         except Exception as e:
-            st.error("❌ Word to PDF conversion failed.")
-            st.info("Make sure Microsoft Word or LibreOffice is installed.")
+            st.error("❌ Pandoc conversion failed.")
+            st.info(
+                "Ensure Pandoc and LaTeX are installed.\n"
+                "Try: https://pandoc.org/installing.html"
+            )
             st.text_area("Error details", str(e))
 
 
@@ -2474,6 +2482,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
