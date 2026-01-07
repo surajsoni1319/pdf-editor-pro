@@ -2407,11 +2407,14 @@ pdfjsLib.getDocument({{ data: pdfData }}).promise.then(doc => {{
 
 
 # ======================================================
-# Feature: Password Protect / Unlock PDF (STREAMLIT SAFE)
+# Feature: Password Protect / Unlock PDF (PASSWORD ONLY)
 # ======================================================
 elif feature == "🔐 Protect / Unlock PDF":
     st.header("🔐 Password Protect / Unlock PDF")
-    st.write("Add password protection, remove password, and control PDF permissions.")
+    st.write(
+        "Add a password to a PDF or remove an existing password "
+        "(if you know the password)."
+    )
 
     uploaded_file = st.file_uploader(
         "Upload PDF file",
@@ -2435,24 +2438,13 @@ elif feature == "🔐 Protect / Unlock PDF":
         # ==================================================
         if action == "🔒 Add Password":
             user_pwd = st.text_input(
-                "User password (required)",
+                "Enter password to protect the PDF",
                 type="password"
             )
 
-            owner_pwd = st.text_input(
-                "Owner password (optional)",
-                type="password",
-                help="Owner password controls permissions"
-            )
-
-            st.markdown("### 🔐 Permissions")
-            allow_print = st.checkbox("Allow printing", value=True)
-            allow_copy = st.checkbox("Allow copying text", value=False)
-            allow_modify = st.checkbox("Allow modifying document", value=False)
-
             if st.button("🔒 Protect PDF", use_container_width=True):
                 if not user_pwd:
-                    st.warning("⚠️ User password is required.")
+                    st.warning("⚠️ Password is required.")
                     st.stop()
 
                 try:
@@ -2462,30 +2454,8 @@ elif feature == "🔐 Protect / Unlock PDF":
                     for page in reader.pages:
                         writer.add_page(page)
 
-                    # ----------------------------------
-                    # Permission flags (OLD PyPDF2 SAFE)
-                    # ----------------------------------
-                    permissions_flag = 0
-                    if allow_print:
-                        permissions_flag |= 4     # PRINT
-                    if allow_modify:
-                        permissions_flag |= 8     # MODIFY
-                    if allow_copy:
-                        permissions_flag |= 16    # COPY
-
-                    # Encrypt (works across PyPDF2 versions)
-                    try:
-                        writer.encrypt(
-                            user_password=user_pwd,
-                            owner_password=owner_pwd or user_pwd,
-                            permissions_flag=permissions_flag
-                        )
-                    except TypeError:
-                        # Very old PyPDF2 fallback
-                        writer.encrypt(
-                            user_password=user_pwd,
-                            owner_password=owner_pwd or user_pwd
-                        )
+                    # Simple, reliable encryption
+                    writer.encrypt(user_password=user_pwd)
 
                     output = io.BytesIO()
                     writer.write(output)
@@ -2494,8 +2464,8 @@ elif feature == "🔐 Protect / Unlock PDF":
                     st.success("✅ PDF protected successfully!")
 
                     st.download_button(
-                        "⬇️ Download Protected PDF",
-                        output.getvalue(),
+                        label="⬇️ Download Protected PDF",
+                        data=output.getvalue(),
                         file_name="protected.pdf",
                         mime="application/pdf",
                         use_container_width=True
@@ -2510,11 +2480,11 @@ elif feature == "🔐 Protect / Unlock PDF":
         # ==================================================
         else:
             current_pwd = st.text_input(
-                "Enter existing PDF password",
+                "Enter current PDF password",
                 type="password"
             )
 
-            if st.button("🔓 Unlock PDF", use_container_width=True):
+            if st.button("🔓 Remove Password", use_container_width=True):
                 if not current_pwd:
                     st.warning("⚠️ Password is required.")
                     st.stop()
@@ -2535,19 +2505,20 @@ elif feature == "🔐 Protect / Unlock PDF":
                     writer.write(output)
                     output.seek(0)
 
-                    st.success("✅ PDF unlocked successfully!")
+                    st.success("✅ Password removed successfully!")
 
                     st.download_button(
-                        "⬇️ Download Unlocked PDF",
-                        output.getvalue(),
+                        label="⬇️ Download Unprotected PDF",
+                        data=output.getvalue(),
                         file_name="unlocked.pdf",
                         mime="application/pdf",
                         use_container_width=True
                     )
 
                 except Exception as e:
-                    st.error("❌ Failed to unlock PDF.")
+                    st.error("❌ Failed to remove password.")
                     st.text_area("Error details", str(e), height=150)
+
 
 #######################################################################
 
@@ -2561,5 +2532,6 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
