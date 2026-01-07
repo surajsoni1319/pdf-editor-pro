@@ -93,6 +93,7 @@ feature = st.sidebar.radio(
         "📸 PDF to Images",
         "✨ Highlight Text",
         "🔀 Reorder Pages",
+        "📄 Word to PDF",
         "✍️ Sign PDF"
 
     ]
@@ -1932,7 +1933,7 @@ elif feature == "🔀 Reorder Pages":
         )
 
 # ======================================================
-# Feature: Sign PDF 
+# Feature 12: Sign PDF 
 # ======================================================
 if feature == "✍️ Sign PDF":
 
@@ -2405,6 +2406,62 @@ pdfjsLib.getDocument({{ data: pdfData }}).promise.then(doc => {{
         st.info("👆 Upload both PDF and signature image to get started")
 
 
+# ======================================================
+# Feature 13: Word to PDF
+# ======================================================
+elif feature == "📄 Word to PDF":
+    st.header("📄 Word to PDF Converter")
+    st.write("Convert Microsoft Word (.docx) files into PDF.")
+
+    st.warning(
+        "⚠️ This feature works on **local systems (Windows/Mac)**. "
+        "It may not work on Streamlit Cloud or Linux servers."
+    )
+
+    uploaded_file = st.file_uploader(
+        "Upload Word file (.docx)",
+        type=["docx"]
+    )
+
+    if uploaded_file:
+        try:
+            from docx2pdf import convert
+            import tempfile
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                word_path = os.path.join(tmpdir, uploaded_file.name)
+                pdf_path = word_path.replace(".docx", ".pdf")
+
+                # Save uploaded file
+                with open(word_path, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+
+                if st.button("📄 Convert to PDF", use_container_width=True):
+                    with st.spinner("Converting Word to PDF..."):
+                        convert(word_path, pdf_path)
+
+                    if os.path.exists(pdf_path):
+                        with open(pdf_path, "rb") as pdf_file:
+                            pdf_bytes = pdf_file.read()
+
+                        st.success("✅ Conversion successful!")
+
+                        st.download_button(
+                            label="⬇️ Download PDF",
+                            data=pdf_bytes,
+                            file_name=uploaded_file.name.replace(".docx", ".pdf"),
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+                    else:
+                        st.error("❌ Conversion failed. PDF not generated.")
+
+        except Exception as e:
+            st.error("❌ Word to PDF conversion failed.")
+            st.info("Make sure Microsoft Word or LibreOffice is installed.")
+            st.text_area("Error details", str(e))
+
+
 #######################################################################
 
 
@@ -2417,6 +2474,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
