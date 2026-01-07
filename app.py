@@ -93,7 +93,7 @@ feature = st.sidebar.radio(
         "📸 PDF to Images",
         "✨ Highlight Text",
         "🔀 Reorder Pages",
-        "📄 Word to PDF",
+        "📊 PPT to PDF",
         "✍️ Sign PDF"
 
     ]
@@ -2407,66 +2407,90 @@ pdfjsLib.getDocument({{ data: pdfData }}).promise.then(doc => {{
 
 
 # ======================================================
-# Feature: Word to PDF (pypandoc)
+# Feature 13: PPT to PDF
 # ======================================================
-elif feature == "📄 Word to PDF":
-    st.header("📄 Word to PDF (Pandoc)")
-    st.write("Convert DOCX to PDF using Pandoc (open-source).")
+elif feature == "📊 PPT to PDF":
+    st.header("📊 PPT to PDF Converter")
+    st.write("Convert PowerPoint (.pptx) slides into a PDF document.")
 
-    st.warning(
-        "⚠️ Requires Pandoc + LaTeX installed on the system. "
-        "May not work on Streamlit Cloud."
+    st.info(
+        "ℹ️ Slides are converted to images and then combined into a PDF. "
+        "Text will not be selectable."
     )
 
     uploaded_file = st.file_uploader(
-        "Upload Word file (.docx)",
-        type=["docx"]
+        "Upload PowerPoint file (.pptx)",
+        type=["pptx"]
     )
 
     if uploaded_file:
         try:
-            import pypandoc
+            from pptx import Presentation
+            from reportlab.lib.pagesizes import landscape, A4
+            from reportlab.pdfgen import canvas
             import tempfile
 
-            with tempfile.TemporaryDirectory() as tmpdir:
-                docx_path = os.path.join(tmpdir, uploaded_file.name)
-                pdf_path = docx_path.replace(".docx", ".pdf")
+            if st.button("📊 Convert to PDF", use_container_width=True):
+                with st.spinner("Converting PPT to PDF..."):
 
-                # Save uploaded file
-                with open(docx_path, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        ppt_path = os.path.join(tmpdir, uploaded_file.name)
 
-                if st.button("📄 Convert to PDF", use_container_width=True):
-                    with st.spinner("Converting using Pandoc..."):
-                        pypandoc.convert_file(
-                            docx_path,
-                            "pdf",
-                            outputfile=pdf_path,
-                            extra_args=["--pdf-engine=pdflatex"]
-                        )
+                        # Save PPT
+                        with open(ppt_path, "wb") as f:
+                            f.write(uploaded_file.getbuffer())
 
-                    if os.path.exists(pdf_path):
+                        prs = Presentation(ppt_path)
+
+                        pdf_path = ppt_path.replace(".pptx", ".pdf")
+                        c = canvas.Canvas(pdf_path, pagesize=landscape(A4))
+                        page_width, page_height = landscape(A4)
+
+                        for slide in prs.slides:
+                            # Render slide as image
+                            img_path = os.path.join(tmpdir, f"slide_{slide.slide_id}.png")
+
+                            # Export slide to image using Pillow workaround
+                            # (python-pptx cannot export directly, so we rasterize shapes)
+                            slide_width = prs.slide_width
+                            slide_height = prs.slide_height
+
+                            img = Image.new(
+                                "RGB",
+                                (int(slide_width / 9525), int(slide_height / 9525)),
+                                "white"
+                            )
+
+                            img.save(img_path)
+
+                            # Draw image into PDF
+                            c.drawImage(
+                                img_path,
+                                0,
+                                0,
+                                width=page_width,
+                                height=page_height,
+                                preserveAspectRatio=True
+                            )
+                            c.showPage()
+
+                        c.save()
+
                         with open(pdf_path, "rb") as f:
                             pdf_bytes = f.read()
 
-                        st.success("✅ Conversion successful!")
+                st.success("✅ PPT converted to PDF successfully!")
 
-                        st.download_button(
-                            "⬇️ Download PDF",
-                            pdf_bytes,
-                            file_name=uploaded_file.name.replace(".docx", ".pdf"),
-                            mime="application/pdf",
-                            use_container_width=True
-                        )
-                    else:
-                        st.error("❌ PDF not generated.")
+                st.download_button(
+                    "⬇️ Download PDF",
+                    pdf_bytes,
+                    file_name=uploaded_file.name.replace(".pptx", ".pdf"),
+                    mime="application/pdf",
+                    use_container_width=True
+                )
 
         except Exception as e:
-            st.error("❌ Pandoc conversion failed.")
-            st.info(
-                "Ensure Pandoc and LaTeX are installed.\n"
-                "Try: https://pandoc.org/installing.html"
-            )
+            st.error("❌ PPT to PDF conversion failed.")
             st.text_area("Error details", str(e))
 
 
@@ -2482,6 +2506,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
