@@ -2407,7 +2407,7 @@ pdfjsLib.getDocument({{ data: pdfData }}).promise.then(doc => {{
 
 
 # ======================================================
-# Feature: Password Protect / Unlock PDF
+# Feature: Password Protect / Unlock PDF (STREAMLIT SAFE)
 # ======================================================
 elif feature == "🔐 Protect / Unlock PDF":
     st.header("🔐 Password Protect / Unlock PDF")
@@ -2420,7 +2420,6 @@ elif feature == "🔐 Protect / Unlock PDF":
 
     if uploaded_file:
         from PyPDF2 import PdfReader, PdfWriter
-        from PyPDF2.constants import Permissions
 
         action = st.radio(
             "Select action",
@@ -2463,17 +2462,18 @@ elif feature == "🔐 Protect / Unlock PDF":
                     for page in reader.pages:
                         writer.add_page(page)
 
-                    # Build permission flags (IMPORTANT FIX)
+                    # ----------------------------------
+                    # Permission flags (OLD PyPDF2 SAFE)
+                    # ----------------------------------
                     permissions_flag = 0
-
                     if allow_print:
-                        permissions_flag |= Permissions.PRINT
-                    if allow_copy:
-                        permissions_flag |= Permissions.COPY
+                        permissions_flag |= 4     # PRINT
                     if allow_modify:
-                        permissions_flag |= Permissions.MODIFY
+                        permissions_flag |= 8     # MODIFY
+                    if allow_copy:
+                        permissions_flag |= 16    # COPY
 
-                    # Encrypt (version-safe)
+                    # Encrypt (works across PyPDF2 versions)
                     try:
                         writer.encrypt(
                             user_password=user_pwd,
@@ -2481,7 +2481,7 @@ elif feature == "🔐 Protect / Unlock PDF":
                             permissions_flag=permissions_flag
                         )
                     except TypeError:
-                        # Fallback for very old PyPDF2
+                        # Very old PyPDF2 fallback
                         writer.encrypt(
                             user_password=user_pwd,
                             owner_password=owner_pwd or user_pwd
@@ -2494,8 +2494,8 @@ elif feature == "🔐 Protect / Unlock PDF":
                     st.success("✅ PDF protected successfully!")
 
                     st.download_button(
-                        label="⬇️ Download Protected PDF",
-                        data=output.getvalue(),
+                        "⬇️ Download Protected PDF",
+                        output.getvalue(),
                         file_name="protected.pdf",
                         mime="application/pdf",
                         use_container_width=True
@@ -2516,14 +2516,14 @@ elif feature == "🔐 Protect / Unlock PDF":
 
             if st.button("🔓 Unlock PDF", use_container_width=True):
                 if not current_pwd:
-                    st.warning("⚠️ Password is required to unlock the PDF.")
+                    st.warning("⚠️ Password is required.")
                     st.stop()
 
                 try:
                     reader = PdfReader(uploaded_file)
 
                     if reader.is_encrypted:
-                        if not reader.decrypt(current_pwd):
+                        if reader.decrypt(current_pwd) == 0:
                             st.error("❌ Incorrect password.")
                             st.stop()
 
@@ -2538,8 +2538,8 @@ elif feature == "🔐 Protect / Unlock PDF":
                     st.success("✅ PDF unlocked successfully!")
 
                     st.download_button(
-                        label="⬇️ Download Unlocked PDF",
-                        data=output.getvalue(),
+                        "⬇️ Download Unlocked PDF",
+                        output.getvalue(),
                         file_name="unlocked.pdf",
                         mime="application/pdf",
                         use_container_width=True
@@ -2548,8 +2548,6 @@ elif feature == "🔐 Protect / Unlock PDF":
                 except Exception as e:
                     st.error("❌ Failed to unlock PDF.")
                     st.text_area("Error details", str(e), height=150)
-
-
 
 #######################################################################
 
@@ -2563,4 +2561,5 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
