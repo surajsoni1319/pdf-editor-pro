@@ -12,6 +12,9 @@ opencv-python
 numpy
 python-pptx
 
+PyMuPDF
+
+
 
 
 
