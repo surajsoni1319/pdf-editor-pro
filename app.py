@@ -2521,12 +2521,13 @@ elif feature == "🔐 Protect PDF":
                     st.text_area("Error details", str(e), height=150)
 
 # ======================================================
-# Feature: Visual Search-Based Redaction (FINAL FIXED)
+# Feature: Smallpdf-like Visual Redaction (FINAL)
 # ======================================================
 elif feature == "🛑 Redact PDF":
+    st.set_page_config(layout="wide")
     st.header("🛑 Redact Text from PDF")
-    st.write(
-        "Search text, preview matches on the document, and permanently redact them."
+    st.caption(
+        "Search text, preview exact matches visually, and permanently redact them."
     )
 
     st.warning("⚠️ Redaction is permanent and cannot be undone.")
@@ -2546,22 +2547,20 @@ elif feature == "🛑 Redact PDF":
         pdf_bytes = uploaded_file.read()
         pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
-        # -------------------------------
-        # Redaction input
-        # -------------------------------
+        # ===============================
+        # Right-side Search Panel (Streamlit)
+        # ===============================
         redact_text = st.text_area(
-            "Enter text to redact (one per line)",
+            "🔍 Enter EXACT text to redact (one per line)",
             placeholder="GULZAR HARDWARE\n8638595914\nASSAM",
             height=120
         )
 
-        case_sensitive = st.checkbox("Case sensitive", value=False)
-
         terms = [t.strip() for t in redact_text.splitlines() if t.strip()]
 
-        # -------------------------------
-        # PDF PREVIEW + HIGHLIGHT (Frontend)
-        # -------------------------------
+        # ===============================
+        # FULL-WIDTH PDF UI (HTML)
+        # ===============================
         html = f"""
 <!DOCTYPE html>
 <html>
@@ -2570,100 +2569,149 @@ elif feature == "🛑 Redact PDF":
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 <style>
-body {{ margin:0; font-family: Arial; }}
-#toolbar {{
-  padding:10px;
-  background:#f4f4f4;
-  border-bottom:1px solid #ccc;
-  font-weight:bold;
+html, body {{
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: Arial, sans-serif;
 }}
+
+#app {{
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+}}
+
+#thumbnails {{
+  width: 120px;
+  overflow-y: auto;
+  background: #f4f4f4;
+  border-right: 1px solid #ccc;
+  padding: 5px;
+}}
+
+.thumb {{
+  margin-bottom: 8px;
+  cursor: pointer;
+  border: 2px solid transparent;
+}}
+
+.thumb:hover {{
+  border-color: #999;
+}}
+
 #viewer {{
-  overflow-y:auto;
-  height:800px;
-  background:#eaeaea;
+  flex: 1;
+  overflow-y: auto;
+  background: #e5e5e5;
 }}
+
 .page {{
-  position:relative;
-  margin:20px auto;
-  background:white;
+  position: relative;
+  margin: 20px auto;
+  background: white;
 }}
+
 canvas {{
-  display:block;
+  display: block;
 }}
+
 .highlight {{
-  position:absolute;
-  background: rgba(255, 0, 0, 0.35);
-  pointer-events:none;
+  position: absolute;
+  background: rgba(0, 0, 0, 0.45); /* BLACK highlight */
+  pointer-events: none;
 }}
 </style>
 </head>
 
 <body>
 
-<div id="toolbar">
-  🔍 Previewing redaction matches
+<div id="app">
+  <div id="thumbnails"></div>
+  <div id="viewer"></div>
 </div>
-
-<div id="viewer"></div>
 
 <script>
 const pdfData = Uint8Array.from(atob("{pdf_b64}"), c => c.charCodeAt(0));
 const searchTerms = {json.dumps(terms)};
-const caseSensitive = {str(case_sensitive).lower()};
 
 pdfjsLib.getDocument({{ data: pdfData }}).promise.then(async function(pdf) {{
   const viewer = document.getElementById("viewer");
+  const thumbs = document.getElementById("thumbnails");
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {{
     const page = await pdf.getPage(pageNum);
-    const viewport = page.getViewport({{ scale: 1.5 }});
 
+    // -------------------------------
+    // Thumbnail (SMALL)
+    // -------------------------------
+    const thumbVp = page.getViewport({{ scale: 0.25 }});
+    const thumbCanvas = document.createElement("canvas");
+    thumbCanvas.width = thumbVp.width;
+    thumbCanvas.height = thumbVp.height;
+    const tctx = thumbCanvas.getContext("2d");
+    await page.render({{ canvasContext: tctx, viewport: thumbVp }}).promise;
+
+    const thumbDiv = document.createElement("div");
+    thumbDiv.className = "thumb";
+    thumbDiv.appendChild(thumbCanvas);
+    thumbs.appendChild(thumbDiv);
+
+    // -------------------------------
+    // Main Page
+    // -------------------------------
+    const viewport = page.getViewport({{ scale: 1.5 }});
     const pageDiv = document.createElement("div");
     pageDiv.className = "page";
+    pageDiv.id = "page_" + pageNum;
     pageDiv.style.width = viewport.width + "px";
     pageDiv.style.height = viewport.height + "px";
 
     const canvas = document.createElement("canvas");
     canvas.width = viewport.width;
     canvas.height = viewport.height;
-
     const ctx = canvas.getContext("2d");
+
     await page.render({{ canvasContext: ctx, viewport: viewport }}).promise;
 
     pageDiv.appendChild(canvas);
     viewer.appendChild(pageDiv);
 
+    // Scroll on thumbnail click
+    thumbDiv.onclick = () => {{
+      pageDiv.scrollIntoView({{ behavior: "smooth" }});
+    }};
+
     if (searchTerms.length === 0) continue;
 
     const textContent = await page.getTextContent();
 
-    textContent.items.forEach(function(item) {{
-      searchTerms.forEach(function(term) {{
+    textContent.items.forEach(item => {{
+      searchTerms.forEach(term => {{
         if (!term) return;
 
-        let hay = caseSensitive ? item.str : item.str.toLowerCase();
-        let needle = caseSensitive ? term : term.toLowerCase();
+        // EXACT MATCH ONLY
+        if (item.str !== term) return;
 
-        if (hay.includes(needle)) {{
-          const tx = pdfjsLib.Util.transform(
-            viewport.transform,
-            item.transform
-          );
+        const tx = pdfjsLib.Util.transform(
+          viewport.transform,
+          item.transform
+        );
 
-          const x = tx[4];
-          const y = tx[5] - item.height;
-          const w = item.width * viewport.scale;
-          const h = item.height * viewport.scale;
+        const x = tx[4];
+        const y = tx[5] - item.height;
+        const w = item.width * viewport.scale;
+        const h = item.height * viewport.scale;
 
-          const mark = document.createElement("div");
-          mark.className = "highlight";
-          mark.style.left = x + "px";
-          mark.style.top = y + "px";
-          mark.style.width = w + "px";
-          mark.style.height = h + "px";
+        const mark = document.createElement("div");
+        mark.className = "highlight";
+        mark.style.left = x + "px";
+        mark.style.top = y + "px";
+        mark.style.width = w + "px";
+        mark.style.height = h + "px";
 
-          pageDiv.appendChild(mark);
-        }}
+        pageDiv.appendChild(mark);
       }});
     }});
   }}
@@ -2673,14 +2721,14 @@ pdfjsLib.getDocument({{ data: pdfData }}).promise.then(async function(pdf) {{
 </body>
 </html>
 """
-        components.html(html, height=850, scrolling=True)
+        components.html(html, height=900, scrolling=False)
 
-        # -------------------------------
+        # ===============================
         # BACKEND PERMANENT REDACTION
-        # -------------------------------
+        # ===============================
         if st.button("🛑 Redact PDF", use_container_width=True):
             if not terms:
-                st.warning("⚠️ Please enter at least one text value to redact.")
+                st.warning("⚠️ Please enter at least one text value.")
                 st.stop()
 
             try:
@@ -2689,14 +2737,14 @@ pdfjsLib.getDocument({{ data: pdfData }}).promise.then(async function(pdf) {{
                     input_path = tmp.name
 
                 doc = fitz.open(input_path)
-                total_redactions = 0
+                total = 0
 
                 for page in doc:
                     for term in terms:
-                        flags = 0 if case_sensitive else fitz.TEXT_IGNORECASE
-                        for inst in page.search_for(term, flags=flags):
+                        # EXACT MATCH ONLY
+                        for inst in page.search_for(term):
                             page.add_redact_annot(inst, fill=(0, 0, 0))
-                            total_redactions += 1
+                            total += 1
                     page.apply_redactions()
 
                 output_path = input_path.replace(".pdf", "_redacted.pdf")
@@ -2707,7 +2755,7 @@ pdfjsLib.getDocument({{ data: pdfData }}).promise.then(async function(pdf) {{
                     redacted_bytes = f.read()
 
                 st.success(
-                    f"✅ Redaction complete. {total_redactions} item(s) permanently removed."
+                    f"✅ Redaction complete. {total} exact match(es) permanently removed."
                 )
 
                 st.download_button(
@@ -2735,6 +2783,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
