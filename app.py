@@ -2521,11 +2521,14 @@ elif feature == "🔐 Protect PDF":
                     st.text_area("Error details", str(e), height=150)
 
 # ======================================================
-# Feature: Smallpdf-like Visual Redaction (NO F-STRING)
+# Feature: Smallpdf-like Visual Redaction (Selectable Text)
 # ======================================================
 elif feature == "🛑 Redact PDF":
     st.header("🛑 Redact Text from PDF")
-    st.caption("Visual search, highlight exact matches, and permanently redact.")
+    st.caption(
+        "Select or copy text from the PDF, paste it below, preview exact matches, "
+        "and permanently redact them."
+    )
 
     st.warning("⚠️ Redaction is permanent and cannot be undone.")
 
@@ -2538,9 +2541,15 @@ elif feature == "🛑 Redact PDF":
         import fitz  # PyMuPDF
         import streamlit.components.v1 as components
 
+        # --------------------------------------------------
+        # Read PDF
+        # --------------------------------------------------
         pdf_bytes = uploaded_file.read()
         pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
+        # --------------------------------------------------
+        # Right-side search panel (Streamlit)
+        # --------------------------------------------------
         redact_text = st.text_area(
             "🔍 Enter EXACT text to redact (one per line)",
             placeholder="GULZAR HARDWARE\n8638595914\nASSAM",
@@ -2551,7 +2560,7 @@ elif feature == "🛑 Redact PDF":
         terms_json = json.dumps(terms)
 
         # --------------------------------------------------
-        # HTML TEMPLATE (NO f-string)
+        # HTML UI (NO f-string, placeholders only)
         # --------------------------------------------------
         html = """
 <!DOCTYPE html>
@@ -2568,41 +2577,68 @@ html, body {
   overflow: hidden;
   font-family: Arial, sans-serif;
 }
+
 #app {
   display: flex;
   height: 100vh;
   width: 100vw;
 }
+
 #thumbnails {
   width: 110px;
   overflow-y: auto;
   background: #f4f4f4;
   border-right: 1px solid #ccc;
-  padding: 5px;
+  padding: 6px;
 }
+
 .thumb {
   margin-bottom: 6px;
   cursor: pointer;
 }
+
 #viewer {
   flex: 1;
   overflow-y: auto;
   background: #e5e5e5;
 }
+
 .page {
   position: relative;
   margin: 20px auto;
   background: white;
 }
+
+/* ---------- TEXT LAYER (SELECTABLE) ---------- */
+.textLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  user-select: text;
+}
+
+.textLayer span {
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  color: transparent;
+}
+
+.textLayer ::selection {
+  background: rgba(0, 120, 215, 0.35);
+}
+
+/* ---------- REDACTION PREVIEW ---------- */
 .highlight {
   position: absolute;
-  background: rgba(0,0,0,0.45);
+  background: rgba(0, 0, 0, 0.45); /* BLACK highlight */
   pointer-events: none;
 }
 </style>
 </head>
 
 <body>
+
 <div id="app">
   <div id="thumbnails"></div>
   <div id="viewer"></div>
@@ -2619,39 +2655,66 @@ pdfjsLib.getDocument({ data: pdfData }).promise.then(async pdf => {
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     const page = await pdf.getPage(pageNum);
 
-    // Thumbnail
+    /* ---------- THUMBNAIL (SMALL) ---------- */
     const thumbVp = page.getViewport({ scale: 0.25 });
     const tCanvas = document.createElement("canvas");
     tCanvas.width = thumbVp.width;
     tCanvas.height = thumbVp.height;
-    await page.render({ canvasContext: tCanvas.getContext("2d"), viewport: thumbVp }).promise;
+    await page.render({
+      canvasContext: tCanvas.getContext("2d"),
+      viewport: thumbVp
+    }).promise;
 
     const tDiv = document.createElement("div");
     tDiv.className = "thumb";
     tDiv.appendChild(tCanvas);
     thumbs.appendChild(tDiv);
 
-    // Main page
+    /* ---------- MAIN PAGE ---------- */
     const vp = page.getViewport({ scale: 1.5 });
+
     const pDiv = document.createElement("div");
     pDiv.className = "page";
     pDiv.style.width = vp.width + "px";
     pDiv.style.height = vp.height + "px";
 
+    // Canvas
     const canvas = document.createElement("canvas");
     canvas.width = vp.width;
     canvas.height = vp.height;
-    await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+    await page.render({
+      canvasContext: canvas.getContext("2d"),
+      viewport: vp
+    }).promise;
 
     pDiv.appendChild(canvas);
+
+    // Text layer (SELECTABLE)
+    const textLayerDiv = document.createElement("div");
+    textLayerDiv.className = "textLayer";
+    textLayerDiv.style.width = vp.width + "px";
+    textLayerDiv.style.height = vp.height + "px";
+    pDiv.appendChild(textLayerDiv);
+
     viewer.appendChild(pDiv);
 
+    // Scroll to page on thumbnail click
     tDiv.onclick = () => pDiv.scrollIntoView({ behavior: "smooth" });
 
+    const textContent = await page.getTextContent();
+
+    // Render selectable text
+    pdfjsLib.renderTextLayer({
+      textContent,
+      container: textLayerDiv,
+      viewport: vp,
+      textDivs: []
+    });
+
+    /* ---------- EXACT MATCH HIGHLIGHT ---------- */
     if (searchTerms.length === 0) continue;
 
-    const text = await page.getTextContent();
-    text.items.forEach(item => {
+    textContent.items.forEach(item => {
       searchTerms.forEach(term => {
         if (item.str === term) {
           const tx = pdfjsLib.Util.transform(vp.transform, item.transform);
@@ -2668,22 +2731,23 @@ pdfjsLib.getDocument({ data: pdfData }).promise.then(async pdf => {
   }
 });
 </script>
+
 </body>
 </html>
 """
 
-        # SAFE replacements (no parsing errors)
+        # Safe placeholder replacement
         html = html.replace("__PDF_BASE64__", pdf_b64)
         html = html.replace("__SEARCH_TERMS__", terms_json)
 
         components.html(html, height=900, scrolling=False)
 
         # --------------------------------------------------
-        # BACKEND REDACTION
+        # BACKEND PERMANENT REDACTION
         # --------------------------------------------------
         if st.button("🛑 Redact PDF", use_container_width=True):
             if not terms:
-                st.warning("⚠️ Enter text to redact.")
+                st.warning("⚠️ Please enter text to redact.")
                 st.stop()
 
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
@@ -2696,7 +2760,7 @@ pdfjsLib.getDocument({ data: pdfData }).promise.then(async pdf => {
             for page in doc:
                 for term in terms:
                     for inst in page.search_for(term):
-                        page.add_redact_annot(inst, fill=(0,0,0))
+                        page.add_redact_annot(inst, fill=(0, 0, 0))
                         total += 1
                 page.apply_redactions()
 
@@ -2705,17 +2769,18 @@ pdfjsLib.getDocument({ data: pdfData }).promise.then(async pdf => {
             doc.close()
 
             with open(output_path, "rb") as f:
-                out_bytes = f.read()
+                redacted_bytes = f.read()
 
-            st.success(f"✅ Redacted {total} exact matches.")
+            st.success(f"✅ Redacted {total} exact match(es).")
 
             st.download_button(
                 "⬇️ Download Redacted PDF",
-                out_bytes,
+                redacted_bytes,
                 file_name="redacted.pdf",
                 mime="application/pdf",
                 use_container_width=True
             )
+
 
 
 #######################################################################
@@ -2730,12 +2795,3 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
-
-
-
-
-
-
-
-
-
