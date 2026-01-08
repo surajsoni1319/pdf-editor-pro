@@ -2521,13 +2521,12 @@ elif feature == "🔐 Protect PDF":
                     st.text_area("Error details", str(e), height=150)
 
 # ======================================================
-# Feature: Manual Text Redaction (User Driven)
+# Feature: Visual Search-Based Redaction (Option A)
 # ======================================================
 elif feature == "🛑 Redact PDF":
     st.header("🛑 Redact Text from PDF")
     st.write(
-        "Enter any text you want to permanently redact from the PDF. "
-        "This works like professional PDF redaction tools."
+        "Search text, preview matches on the document, and permanently redact them."
     )
 
     st.warning("⚠️ Redaction is permanent and cannot be undone.")
@@ -2538,104 +2537,165 @@ elif feature == "🛑 Redact PDF":
     )
 
     if uploaded_file:
-        import fitz  # PyMuPDF
+        import base64
         import tempfile
+        import fitz
+        import json
+        import streamlit.components.v1 as components
+
+        pdf_bytes = uploaded_file.read()
+        pdf_b64 = base64.b64encode(pdf_bytes).decode()
 
         # -------------------------------
-        # Redaction controls (RIGHT PANEL STYLE)
+        # Redaction input
         # -------------------------------
-        st.markdown("### 🔍 Redaction Controls")
-
         redact_text = st.text_area(
             "Enter text to redact (one per line)",
             placeholder="GULZAR HARDWARE\n8638595914\nASSAM",
             height=120
         )
 
-        col1, col2 = st.columns(2)
-        with col1:
-            case_sensitive = st.checkbox("Case sensitive", value=False)
-        with col2:
-            redact_all_pages = st.checkbox("Redact all pages", value=True)
+        case_sensitive = st.checkbox("Case sensitive", value=False)
 
-        pages_input = None
-        if not redact_all_pages:
-            pages_input = st.text_input(
-                "Enter page numbers (comma-separated, e.g. 1,3,5)",
-                placeholder="1,2"
-            )
+        if not redact_text.strip():
+            st.info("👆 Enter text to see highlights in the PDF preview.")
 
+        # -------------------------------
+        # HTML + JS Viewer (Preview Layer)
+        # -------------------------------
+        html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<style>
+body {{ margin:0; font-family: Arial; }}
+#toolbar {{
+  padding:10px;
+  background:#f4f4f4;
+  border-bottom:1px solid #ccc;
+}}
+#viewer {{ overflow-y:auto; height:800px; }}
+.page {{ position:relative; margin:10px auto; }}
+canvas {{ display:block; }}
+.highlight {{
+  position:absolute;
+  background: rgba(255, 0, 0, 0.35);
+  pointer-events:none;
+}}
+</style>
+</head>
+
+<body>
+
+<div id="toolbar">
+  🔍 Previewing redaction matches
+</div>
+
+<div id="viewer"></div>
+
+<script>
+const pdfData = Uint8Array.from(atob("{pdf_b64}"), c => c.charCodeAt(0));
+const searchTerms = {json.dumps([t.strip() for t in redact_text.splitlines() if t.strip()])};
+const caseSensitive = {str(case_sensitive).lower()};
+
+pdfjsLib.getDocument({{ data: pdfData }}).promise.then(async pdf => {{
+  const viewer = document.getElementById("viewer");
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {{
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({{ scale: 1.5 }});
+
+    const pageDiv = document.createElement("div");
+    pageDiv.className = "page";
+    pageDiv.style.width = viewport.width + "px";
+    pageDiv.style.height = viewport.height + "px";
+
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+
+    const ctx = canvas.getContext("2d");
+    await page.render({{ canvasContext: ctx, viewport }}).promise;
+
+    pageDiv.appendChild(canvas);
+    viewer.appendChild(pageDiv);
+
+    const textContent = await page.getTextContent();
+
+    textContent.items.forEach(item => {{
+      searchTerms.forEach(term => {{
+        if (!term) return;
+
+        let hay = caseSensitive ? item.str : item.str.toLowerCase();
+        let needle = caseSensitive ? term : term.toLowerCase();
+
+        if (hay.includes(needle)) {{
+          const tx = pdfjsLib.Util.transform(
+            viewport.transform,
+            item.transform
+          );
+
+          const x = tx[4];
+          const y = tx[5] - item.height;
+          const w = item.width * viewport.scale;
+          const h = item.height * viewport.scale;
+
+          const mark = document.createElement("div");
+          mark.className = "highlight";
+          mark.style.left = x + "px";
+          mark.style.top = y + "px";
+          mark.style.width = w + "px";
+          mark.style.height = h + "px";
+
+          pageDiv.appendChild(mark);
+        }}
+      }});
+    }});
+  }}
+});
+</script>
+
+</body>
+</html>
+"""
+        components.html(html, height=850, scrolling=True)
+
+        # -------------------------------
+        # APPLY REDACTION (Backend)
+        # -------------------------------
         if st.button("🛑 Redact PDF", use_container_width=True):
-            if not redact_text.strip():
-                st.warning("⚠️ Please enter text to redact.")
-                st.stop()
-
             try:
-                # Save uploaded PDF
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                    tmp.write(uploaded_file.getbuffer())
-                    input_pdf_path = tmp.name
-
-                doc = fitz.open(input_pdf_path)
-
-                # Parse redaction terms
-                terms = [
-                    t.strip() for t in redact_text.splitlines() if t.strip()
-                ]
-
+                terms = [t.strip() for t in redact_text.splitlines() if t.strip()]
                 if not terms:
-                    st.warning("⚠️ No valid redaction terms found.")
+                    st.warning("⚠️ Enter at least one text value.")
                     st.stop()
 
-                # Parse pages
-                target_pages = None
-                if not redact_all_pages:
-                    try:
-                        target_pages = [
-                            int(p.strip()) - 1
-                            for p in pages_input.split(",")
-                        ]
-                    except Exception:
-                        st.error("❌ Invalid page numbers.")
-                        st.stop()
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                    tmp.write(pdf_bytes)
+                    input_path = tmp.name
 
-                total_redactions = 0
+                doc = fitz.open(input_path)
+                total = 0
 
-                # -------------------------------
-                # Apply redactions
-                # -------------------------------
-                for page_index in range(len(doc)):
-                    if target_pages is not None and page_index not in target_pages:
-                        continue
-
-                    page = doc[page_index]
-
+                for page in doc:
                     for term in terms:
-                        instances = page.search_for(
-                            term,
-                            flags=0 if case_sensitive else fitz.TEXT_IGNORECASE
-                        )
-
-                        for inst in instances:
+                        flags = 0 if case_sensitive else fitz.TEXT_IGNORECASE
+                        for inst in page.search_for(term, flags=flags):
                             page.add_redact_annot(inst, fill=(0, 0, 0))
-                            total_redactions += 1
-
+                            total += 1
                     page.apply_redactions()
 
-                if total_redactions == 0:
-                    st.info("ℹ️ No matching text found.")
-
-                # Save output
-                output_path = input_pdf_path.replace(".pdf", "_redacted.pdf")
+                output_path = input_path.replace(".pdf", "_redacted.pdf")
                 doc.save(output_path)
                 doc.close()
 
                 with open(output_path, "rb") as f:
                     redacted_bytes = f.read()
 
-                st.success(
-                    f"✅ Redaction complete. Total redactions: {total_redactions}"
-                )
+                st.success(f"✅ Redaction complete ({total} items removed).")
 
                 st.download_button(
                     "⬇️ Download Redacted PDF",
@@ -2661,6 +2721,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
