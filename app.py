@@ -93,7 +93,8 @@ feature = st.sidebar.radio(
         "📸 PDF to Images",
         "✨ Highlight Text",
         "🔀 Reorder Pages",
-        "🔐 Protect / Unlock PDF",
+        "🔐 Protect PDF",
+        "🛑 Redact",
         "✍️ Sign PDF"
 
     ]
@@ -2409,7 +2410,7 @@ pdfjsLib.getDocument({{ data: pdfData }}).promise.then(doc => {{
 # ======================================================
 # Feature: Password Protect / Unlock PDF (PASSWORD ONLY)
 # ======================================================
-elif feature == "🔐 Protect / Unlock PDF":
+elif feature == "🔐 Protect PDF":
     st.header("🔐 Password Protect / Unlock PDF")
     st.write(
         "Add a password to a PDF or remove an existing password "
@@ -2519,6 +2520,134 @@ elif feature == "🔐 Protect / Unlock PDF":
                     st.error("❌ Failed to remove password.")
                     st.text_area("Error details", str(e), height=150)
 
+# ======================================================
+# Feature: Manual Text Redaction (User Driven)
+# ======================================================
+elif feature == "🛑 Redact ":
+    st.header("🛑 Redact Text from PDF")
+    st.write(
+        "Enter any text you want to permanently redact from the PDF. "
+        "This works like professional PDF redaction tools."
+    )
+
+    st.warning("⚠️ Redaction is permanent and cannot be undone.")
+
+    uploaded_file = st.file_uploader(
+        "Upload PDF file",
+        type=["pdf"]
+    )
+
+    if uploaded_file:
+        import fitz  # PyMuPDF
+        import tempfile
+
+        # -------------------------------
+        # Redaction controls (RIGHT PANEL STYLE)
+        # -------------------------------
+        st.markdown("### 🔍 Redaction Controls")
+
+        redact_text = st.text_area(
+            "Enter text to redact (one per line)",
+            placeholder="GULZAR HARDWARE\n8638595914\nASSAM",
+            height=120
+        )
+
+        col1, col2 = st.columns(2)
+        with col1:
+            case_sensitive = st.checkbox("Case sensitive", value=False)
+        with col2:
+            redact_all_pages = st.checkbox("Redact all pages", value=True)
+
+        pages_input = None
+        if not redact_all_pages:
+            pages_input = st.text_input(
+                "Enter page numbers (comma-separated, e.g. 1,3,5)",
+                placeholder="1,2"
+            )
+
+        if st.button("🛑 Redact PDF", use_container_width=True):
+            if not redact_text.strip():
+                st.warning("⚠️ Please enter text to redact.")
+                st.stop()
+
+            try:
+                # Save uploaded PDF
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                    tmp.write(uploaded_file.getbuffer())
+                    input_pdf_path = tmp.name
+
+                doc = fitz.open(input_pdf_path)
+
+                # Parse redaction terms
+                terms = [
+                    t.strip() for t in redact_text.splitlines() if t.strip()
+                ]
+
+                if not terms:
+                    st.warning("⚠️ No valid redaction terms found.")
+                    st.stop()
+
+                # Parse pages
+                target_pages = None
+                if not redact_all_pages:
+                    try:
+                        target_pages = [
+                            int(p.strip()) - 1
+                            for p in pages_input.split(",")
+                        ]
+                    except Exception:
+                        st.error("❌ Invalid page numbers.")
+                        st.stop()
+
+                total_redactions = 0
+
+                # -------------------------------
+                # Apply redactions
+                # -------------------------------
+                for page_index in range(len(doc)):
+                    if target_pages is not None and page_index not in target_pages:
+                        continue
+
+                    page = doc[page_index]
+
+                    for term in terms:
+                        instances = page.search_for(
+                            term,
+                            flags=0 if case_sensitive else fitz.TEXT_IGNORECASE
+                        )
+
+                        for inst in instances:
+                            page.add_redact_annot(inst, fill=(0, 0, 0))
+                            total_redactions += 1
+
+                    page.apply_redactions()
+
+                if total_redactions == 0:
+                    st.info("ℹ️ No matching text found.")
+
+                # Save output
+                output_path = input_pdf_path.replace(".pdf", "_redacted.pdf")
+                doc.save(output_path)
+                doc.close()
+
+                with open(output_path, "rb") as f:
+                    redacted_bytes = f.read()
+
+                st.success(
+                    f"✅ Redaction complete. Total redactions: {total_redactions}"
+                )
+
+                st.download_button(
+                    "⬇️ Download Redacted PDF",
+                    redacted_bytes,
+                    file_name="redacted.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+
+            except Exception as e:
+                st.error("❌ Redaction failed.")
+                st.text_area("Error details", str(e), height=200)
 
 #######################################################################
 
@@ -2532,6 +2661,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
