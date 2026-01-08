@@ -2521,35 +2521,26 @@ elif feature == "🔐 Protect PDF":
                     st.text_area("Error details", str(e), height=150)
 
 # ======================================================
-# Feature: Smallpdf-like Visual Redaction (FINAL)
+# Feature: Smallpdf-like Visual Redaction (NO F-STRING)
 # ======================================================
 elif feature == "🛑 Redact PDF":
-    st.set_page_config(layout="wide")
     st.header("🛑 Redact Text from PDF")
-    st.caption(
-        "Search text, preview exact matches visually, and permanently redact them."
-    )
+    st.caption("Visual search, highlight exact matches, and permanently redact.")
 
     st.warning("⚠️ Redaction is permanent and cannot be undone.")
 
-    uploaded_file = st.file_uploader(
-        "Upload PDF file",
-        type=["pdf"]
-    )
+    uploaded_file = st.file_uploader("Upload PDF", type=["pdf"])
 
     if uploaded_file:
         import base64
         import tempfile
-        import fitz  # PyMuPDF
         import json
+        import fitz  # PyMuPDF
         import streamlit.components.v1 as components
 
         pdf_bytes = uploaded_file.read()
         pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
-        # ===============================
-        # Right-side Search Panel (Streamlit)
-        # ===============================
         redact_text = st.text_area(
             "🔍 Enter EXACT text to redact (one per line)",
             placeholder="GULZAR HARDWARE\n8638595914\nASSAM",
@@ -2557,11 +2548,12 @@ elif feature == "🛑 Redact PDF":
         )
 
         terms = [t.strip() for t in redact_text.splitlines() if t.strip()]
+        terms_json = json.dumps(terms)
 
-        # ===============================
-        # FULL-WIDTH PDF UI (HTML)
-        # ===============================
-        html = f"""
+        # --------------------------------------------------
+        # HTML TEMPLATE (NO f-string)
+        # --------------------------------------------------
+        html = """
 <!DOCTYPE html>
 <html>
 <head>
@@ -2569,206 +2561,161 @@ elif feature == "🛑 Redact PDF":
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 <style>
-html, body {{
+html, body {
   margin: 0;
   padding: 0;
   height: 100%;
   overflow: hidden;
   font-family: Arial, sans-serif;
-}}
-
-#app {{
+}
+#app {
   display: flex;
   height: 100vh;
   width: 100vw;
-}}
-
-#thumbnails {{
-  width: 120px;
+}
+#thumbnails {
+  width: 110px;
   overflow-y: auto;
   background: #f4f4f4;
   border-right: 1px solid #ccc;
   padding: 5px;
-}}
-
-.thumb {{
-  margin-bottom: 8px;
+}
+.thumb {
+  margin-bottom: 6px;
   cursor: pointer;
-  border: 2px solid transparent;
-}}
-
-.thumb:hover {{
-  border-color: #999;
-}}
-
-#viewer {{
+}
+#viewer {
   flex: 1;
   overflow-y: auto;
   background: #e5e5e5;
-}}
-
-.page {{
+}
+.page {
   position: relative;
   margin: 20px auto;
   background: white;
-}}
-
-canvas {{
-  display: block;
-}}
-
-.highlight {{
+}
+.highlight {
   position: absolute;
-  background: rgba(0, 0, 0, 0.45); /* BLACK highlight */
+  background: rgba(0,0,0,0.45);
   pointer-events: none;
-}}
+}
 </style>
 </head>
 
 <body>
-
 <div id="app">
   <div id="thumbnails"></div>
   <div id="viewer"></div>
 </div>
 
 <script>
-const pdfData = Uint8Array.from(atob("{pdf_b64}"), c => c.charCodeAt(0));
-const searchTerms = {json.dumps(terms)};
+const pdfData = Uint8Array.from(atob("__PDF_BASE64__"), c => c.charCodeAt(0));
+const searchTerms = __SEARCH_TERMS__;
 
-pdfjsLib.getDocument({{ data: pdfData }}).promise.then(async function(pdf) {{
+pdfjsLib.getDocument({ data: pdfData }).promise.then(async pdf => {
   const viewer = document.getElementById("viewer");
   const thumbs = document.getElementById("thumbnails");
 
-  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {{
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     const page = await pdf.getPage(pageNum);
 
-    // -------------------------------
-    // Thumbnail (SMALL)
-    // -------------------------------
-    const thumbVp = page.getViewport({{ scale: 0.25 }});
-    const thumbCanvas = document.createElement("canvas");
-    thumbCanvas.width = thumbVp.width;
-    thumbCanvas.height = thumbVp.height;
-    const tctx = thumbCanvas.getContext("2d");
-    await page.render({{ canvasContext: tctx, viewport: thumbVp }}).promise;
+    // Thumbnail
+    const thumbVp = page.getViewport({ scale: 0.25 });
+    const tCanvas = document.createElement("canvas");
+    tCanvas.width = thumbVp.width;
+    tCanvas.height = thumbVp.height;
+    await page.render({ canvasContext: tCanvas.getContext("2d"), viewport: thumbVp }).promise;
 
-    const thumbDiv = document.createElement("div");
-    thumbDiv.className = "thumb";
-    thumbDiv.appendChild(thumbCanvas);
-    thumbs.appendChild(thumbDiv);
+    const tDiv = document.createElement("div");
+    tDiv.className = "thumb";
+    tDiv.appendChild(tCanvas);
+    thumbs.appendChild(tDiv);
 
-    // -------------------------------
-    // Main Page
-    // -------------------------------
-    const viewport = page.getViewport({{ scale: 1.5 }});
-    const pageDiv = document.createElement("div");
-    pageDiv.className = "page";
-    pageDiv.id = "page_" + pageNum;
-    pageDiv.style.width = viewport.width + "px";
-    pageDiv.style.height = viewport.height + "px";
+    // Main page
+    const vp = page.getViewport({ scale: 1.5 });
+    const pDiv = document.createElement("div");
+    pDiv.className = "page";
+    pDiv.style.width = vp.width + "px";
+    pDiv.style.height = vp.height + "px";
 
     const canvas = document.createElement("canvas");
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    const ctx = canvas.getContext("2d");
+    canvas.width = vp.width;
+    canvas.height = vp.height;
+    await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
 
-    await page.render({{ canvasContext: ctx, viewport: viewport }}).promise;
+    pDiv.appendChild(canvas);
+    viewer.appendChild(pDiv);
 
-    pageDiv.appendChild(canvas);
-    viewer.appendChild(pageDiv);
-
-    // Scroll on thumbnail click
-    thumbDiv.onclick = () => {{
-      pageDiv.scrollIntoView({{ behavior: "smooth" }});
-    }};
+    tDiv.onclick = () => pDiv.scrollIntoView({ behavior: "smooth" });
 
     if (searchTerms.length === 0) continue;
 
-    const textContent = await page.getTextContent();
-
-    textContent.items.forEach(item => {{
-      searchTerms.forEach(term => {{
-        if (!term) return;
-
-        // EXACT MATCH ONLY
-        if (item.str !== term) return;
-
-        const tx = pdfjsLib.Util.transform(
-          viewport.transform,
-          item.transform
-        );
-
-        const x = tx[4];
-        const y = tx[5] - item.height;
-        const w = item.width * viewport.scale;
-        const h = item.height * viewport.scale;
-
-        const mark = document.createElement("div");
-        mark.className = "highlight";
-        mark.style.left = x + "px";
-        mark.style.top = y + "px";
-        mark.style.width = w + "px";
-        mark.style.height = h + "px";
-
-        pageDiv.appendChild(mark);
-      }});
-    }});
-  }}
+    const text = await page.getTextContent();
+    text.items.forEach(item => {
+      searchTerms.forEach(term => {
+        if (item.str === term) {
+          const tx = pdfjsLib.Util.transform(vp.transform, item.transform);
+          const mark = document.createElement("div");
+          mark.className = "highlight";
+          mark.style.left = tx[4] + "px";
+          mark.style.top = (tx[5] - item.height) + "px";
+          mark.style.width = (item.width * vp.scale) + "px";
+          mark.style.height = (item.height * vp.scale) + "px";
+          pDiv.appendChild(mark);
+        }
+      });
+    });
+  }
 });
 </script>
-
 </body>
 </html>
 """
+
+        # SAFE replacements (no parsing errors)
+        html = html.replace("__PDF_BASE64__", pdf_b64)
+        html = html.replace("__SEARCH_TERMS__", terms_json)
+
         components.html(html, height=900, scrolling=False)
 
-        # ===============================
-        # BACKEND PERMANENT REDACTION
-        # ===============================
+        # --------------------------------------------------
+        # BACKEND REDACTION
+        # --------------------------------------------------
         if st.button("🛑 Redact PDF", use_container_width=True):
             if not terms:
-                st.warning("⚠️ Please enter at least one text value.")
+                st.warning("⚠️ Enter text to redact.")
                 st.stop()
 
-            try:
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                    tmp.write(pdf_bytes)
-                    input_path = tmp.name
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                tmp.write(pdf_bytes)
+                input_path = tmp.name
 
-                doc = fitz.open(input_path)
-                total = 0
+            doc = fitz.open(input_path)
+            total = 0
 
-                for page in doc:
-                    for term in terms:
-                        # EXACT MATCH ONLY
-                        for inst in page.search_for(term):
-                            page.add_redact_annot(inst, fill=(0, 0, 0))
-                            total += 1
-                    page.apply_redactions()
+            for page in doc:
+                for term in terms:
+                    for inst in page.search_for(term):
+                        page.add_redact_annot(inst, fill=(0,0,0))
+                        total += 1
+                page.apply_redactions()
 
-                output_path = input_path.replace(".pdf", "_redacted.pdf")
-                doc.save(output_path)
-                doc.close()
+            output_path = input_path.replace(".pdf", "_redacted.pdf")
+            doc.save(output_path)
+            doc.close()
 
-                with open(output_path, "rb") as f:
-                    redacted_bytes = f.read()
+            with open(output_path, "rb") as f:
+                out_bytes = f.read()
 
-                st.success(
-                    f"✅ Redaction complete. {total} exact match(es) permanently removed."
-                )
+            st.success(f"✅ Redacted {total} exact matches.")
 
-                st.download_button(
-                    "⬇️ Download Redacted PDF",
-                    redacted_bytes,
-                    file_name="redacted.pdf",
-                    mime="application/pdf",
-                    use_container_width=True
-                )
-
-            except Exception as e:
-                st.error("❌ Redaction failed.")
-                st.text_area("Error details", str(e), height=200)
+            st.download_button(
+                "⬇️ Download Redacted PDF",
+                out_bytes,
+                file_name="redacted.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
 
 
 #######################################################################
@@ -2783,6 +2730,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
