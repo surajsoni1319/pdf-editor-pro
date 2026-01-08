@@ -94,7 +94,7 @@ feature = st.sidebar.radio(
         "✨ Highlight Text",
         "🔀 Reorder Pages",
         "🔐 Protect PDF",
-        "🛑 Redact",
+        "🛑 Redact PDF",
         "✍️ Sign PDF"
 
     ]
@@ -2523,7 +2523,7 @@ elif feature == "🔐 Protect PDF":
 # ======================================================
 # Feature: Manual Text Redaction (User Driven)
 # ======================================================
-elif feature == "🛑 Redact ":
+elif feature == "🛑 Redact PDF":
     st.header("🛑 Redact Text from PDF")
     st.write(
         "Enter any text you want to permanently redact from the PDF. "
@@ -2661,6 +2661,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
