@@ -2521,7 +2521,7 @@ elif feature == "🔐 Protect PDF":
                     st.text_area("Error details", str(e), height=150)
 
 # ======================================================
-# Feature: Visual Search-Based Redaction (Option A)
+# Feature: Visual Search-Based Redaction (FINAL FIXED)
 # ======================================================
 elif feature == "🛑 Redact PDF":
     st.header("🛑 Redact Text from PDF")
@@ -2539,12 +2539,12 @@ elif feature == "🛑 Redact PDF":
     if uploaded_file:
         import base64
         import tempfile
-        import fitz
+        import fitz  # PyMuPDF
         import json
         import streamlit.components.v1 as components
 
         pdf_bytes = uploaded_file.read()
-        pdf_b64 = base64.b64encode(pdf_bytes).decode()
+        pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
         # -------------------------------
         # Redaction input
@@ -2557,11 +2557,10 @@ elif feature == "🛑 Redact PDF":
 
         case_sensitive = st.checkbox("Case sensitive", value=False)
 
-        if not redact_text.strip():
-            st.info("👆 Enter text to see highlights in the PDF preview.")
+        terms = [t.strip() for t in redact_text.splitlines() if t.strip()]
 
         # -------------------------------
-        # HTML + JS Viewer (Preview Layer)
+        # PDF PREVIEW + HIGHLIGHT (Frontend)
         # -------------------------------
         html = f"""
 <!DOCTYPE html>
@@ -2576,10 +2575,21 @@ body {{ margin:0; font-family: Arial; }}
   padding:10px;
   background:#f4f4f4;
   border-bottom:1px solid #ccc;
+  font-weight:bold;
 }}
-#viewer {{ overflow-y:auto; height:800px; }}
-.page {{ position:relative; margin:10px auto; }}
-canvas {{ display:block; }}
+#viewer {{
+  overflow-y:auto;
+  height:800px;
+  background:#eaeaea;
+}}
+.page {{
+  position:relative;
+  margin:20px auto;
+  background:white;
+}}
+canvas {{
+  display:block;
+}}
 .highlight {{
   position:absolute;
   background: rgba(255, 0, 0, 0.35);
@@ -2598,10 +2608,10 @@ canvas {{ display:block; }}
 
 <script>
 const pdfData = Uint8Array.from(atob("{pdf_b64}"), c => c.charCodeAt(0));
-const searchTerms = {json.dumps([t.strip() for t in redact_text.splitlines() if t.strip()])};
+const searchTerms = {json.dumps(terms)};
 const caseSensitive = {str(case_sensitive).lower()};
 
-pdfjsLib.getDocument({{ data: pdfData }}).promise.then(async pdf => {{
+pdfjsLib.getDocument({{ data: pdfData }}).promise.then(async function(pdf) {{
   const viewer = document.getElementById("viewer");
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {{
@@ -2618,15 +2628,17 @@ pdfjsLib.getDocument({{ data: pdfData }}).promise.then(async pdf => {{
     canvas.height = viewport.height;
 
     const ctx = canvas.getContext("2d");
-    await page.render({{ canvasContext: ctx, viewport }}).promise;
+    await page.render({{ canvasContext: ctx, viewport: viewport }}).promise;
 
     pageDiv.appendChild(canvas);
     viewer.appendChild(pageDiv);
 
+    if (searchTerms.length === 0) continue;
+
     const textContent = await page.getTextContent();
 
-    textContent.items.forEach(item => {{
-      searchTerms.forEach(term => {{
+    textContent.items.forEach(function(item) {{
+      searchTerms.forEach(function(term) {{
         if (!term) return;
 
         let hay = caseSensitive ? item.str : item.str.toLowerCase();
@@ -2664,28 +2676,27 @@ pdfjsLib.getDocument({{ data: pdfData }}).promise.then(async pdf => {{
         components.html(html, height=850, scrolling=True)
 
         # -------------------------------
-        # APPLY REDACTION (Backend)
+        # BACKEND PERMANENT REDACTION
         # -------------------------------
         if st.button("🛑 Redact PDF", use_container_width=True):
-            try:
-                terms = [t.strip() for t in redact_text.splitlines() if t.strip()]
-                if not terms:
-                    st.warning("⚠️ Enter at least one text value.")
-                    st.stop()
+            if not terms:
+                st.warning("⚠️ Please enter at least one text value to redact.")
+                st.stop()
 
+            try:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                     tmp.write(pdf_bytes)
                     input_path = tmp.name
 
                 doc = fitz.open(input_path)
-                total = 0
+                total_redactions = 0
 
                 for page in doc:
                     for term in terms:
                         flags = 0 if case_sensitive else fitz.TEXT_IGNORECASE
                         for inst in page.search_for(term, flags=flags):
                             page.add_redact_annot(inst, fill=(0, 0, 0))
-                            total += 1
+                            total_redactions += 1
                     page.apply_redactions()
 
                 output_path = input_path.replace(".pdf", "_redacted.pdf")
@@ -2695,7 +2706,9 @@ pdfjsLib.getDocument({{ data: pdfData }}).promise.then(async pdf => {{
                 with open(output_path, "rb") as f:
                     redacted_bytes = f.read()
 
-                st.success(f"✅ Redaction complete ({total} items removed).")
+                st.success(
+                    f"✅ Redaction complete. {total_redactions} item(s) permanently removed."
+                )
 
                 st.download_button(
                     "⬇️ Download Redacted PDF",
@@ -2709,6 +2722,7 @@ pdfjsLib.getDocument({{ data: pdfData }}).promise.then(async pdf => {{
                 st.error("❌ Redaction failed.")
                 st.text_area("Error details", str(e), height=200)
 
+
 #######################################################################
 
 
@@ -2721,6 +2735,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
