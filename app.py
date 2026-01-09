@@ -2552,7 +2552,7 @@ elif feature == "🛑 Redact PDF":
         # --------------------------------------------------
         redact_text = st.text_area(
             "🔍 Enter EXACT text to redact (one per line)",
-            placeholder="GULZAR HARDWARE\n8638595914\nASSAM",
+            placeholder="Copy and Paste your Censitive Info in the Box\nFor Ex: Phone No. \nAccount no. / PAN / TAN",
             height=120
         )
 
@@ -2795,3 +2795,4 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
